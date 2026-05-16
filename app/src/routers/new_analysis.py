@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from ..models.requests import StartAnalysisRequest
-from ..models.responses import StartAnalysisResponse, GetReportResponse ,CreateSpaceResponse, GetSpaceResponse
-from ..analysis_manager import start_analysis, get_analysis_state, create_space, get_space
+from ..models.responses import StartAnalysisResponse, GetReportResponse, CreateSpaceResponse, GetSpaceResponse, DeleteSpaceResponse, StopAnalysisResponse
+from ..analysis_manager import start_analysis, get_analysis_state, create_space, get_space, delete_space, stop_analysis
 
 router = APIRouter()
 
@@ -43,6 +43,17 @@ async def get_report(id: str):
             steps=[]
         )
 
+@router.post("/stop-analysis", response_model=StopAnalysisResponse)
+async def stop_analysis_endpoint(id: str):
+    """Stop a running analysis"""
+    try:
+        found = stop_analysis(id)
+        if not found:
+            return StopAnalysisResponse(success=False, error="Analysis ID not found")
+        return StopAnalysisResponse(success=True)
+    except Exception as e:
+        return StopAnalysisResponse(success=False, error=f"Stop error: {str(e)}")
+
 # Create and retrieve spaces
 @router.post("/create-space", response_model=CreateSpaceResponse)
 async def create_space_endpoint():
@@ -61,3 +72,16 @@ async def get_space_endpoint(space_id: str):
         return GetSpaceResponse(analysis_ids=analysis_ids)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Space retrieval error: {str(e)}")
+
+@router.delete("/delete-space/{space_id}", response_model=DeleteSpaceResponse)
+async def delete_space_endpoint(space_id: str):
+    """Delete a space and all its associated analyses"""
+    try:
+        deleted = delete_space(space_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Space not found")
+        return DeleteSpaceResponse(success=True)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Space deletion error: {str(e)}")

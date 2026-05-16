@@ -4,6 +4,8 @@ interface BaseNavItem {
   title: string
   badge?: string
   icon?: React.ElementType
+  id?: string
+  onDelete?: (id: string) => void
 }
 
 type NavLink = BaseNavItem & {

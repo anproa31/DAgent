@@ -99,6 +99,12 @@ const getSpace = async (id: string): Promise<GetSpaceResponse> => {
   return response.data
 }
 
+// Space deletion API
+const deleteSpace = async (id: string): Promise<{ success: boolean }> => {
+  const response = await axios.delete<{ success: boolean }>(`${API_BASE_URL}/delete-space/${id}`)
+  return response.data
+}
+
 // Analysis start API
 const startAnalysis = async (params: StartAnalysisParams): Promise<StartAnalysisResponse> => {
   const response = await axios.post<StartAnalysisResponse>(`${API_BASE_URL}/start-analysis`, {
@@ -108,6 +114,14 @@ const startAnalysis = async (params: StartAnalysisParams): Promise<StartAnalysis
       mode: params.mode || 'standard',
       model: params.model || '',
       index: params.index,
+  })
+  return response.data
+}
+
+// Stop analysis API
+const stopAnalysis = async (id: string): Promise<{ success: boolean; error?: string }> => {
+  const response = await axios.post<{ success: boolean; error?: string }>(`${API_BASE_URL}/stop-analysis`, null, {
+    params: { id }
   })
   return response.data
 }
@@ -165,6 +179,20 @@ export const useGetSpace = (id: string) => {
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
     // refetchInterval: 2000, // Check every 2 seconds if a new analysis has been added
     // refetchIntervalInBackground: true,
+  })
+}
+
+// Space deletion hook
+export const useDeleteSpace = () => {
+  return useMutation({
+    mutationFn: deleteSpace,
+  })
+}
+
+// Stop analysis hook
+export const useStopAnalysis = () => {
+  return useMutation({
+    mutationFn: stopAnalysis,
   })
 }
 

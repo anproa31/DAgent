@@ -67,13 +67,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     <>
       <Sidebar collapsible='icon' {...props}>
         <SidebarHeader>
-          {
-            open ? (
-              <div className='px-3 py-2'>
-                <img src={quelLogo} alt='data-analysis-agent logo' className='h-8 w-auto' />
-              </div>
-            ) : null
-          }
+          <div className={open ? 'px-3 py-2' : 'flex items-center justify-center py-2'}>
+            <img src={quelLogo} alt='data-analysis-agent logo' className={open ? 'h-8 w-auto' : 'h-6 w-6'} />
+          </div>
         </SidebarHeader>
         <SidebarContent>
           <NewAnalysisBtn />
