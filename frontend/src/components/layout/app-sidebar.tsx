@@ -1,5 +1,5 @@
 import React from 'react'
-import quelLogo from '@/assets/olazc9.svg'
+import logo from '@/assets/olazc9.svg'
 import { useSidebarData } from '@/hooks/use-sidebar-data'
 import { useTableList } from '@/hooks/use-table-list'
 import {
@@ -68,7 +68,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <Sidebar collapsible='icon' {...props}>
         <SidebarHeader>
           <div className={open ? 'px-3 py-2' : 'flex items-center justify-center py-2'}>
-            <img src={quelLogo} alt='data-analysis-agent logo' className={open ? 'h-8 w-auto' : 'h-6 w-6'} />
+            <img src={logo} alt='data-analysis-agent logo' className={open ? 'h-8 w-auto' : 'h-6 w-6'} />
           </div>
         </SidebarHeader>
         <SidebarContent>
