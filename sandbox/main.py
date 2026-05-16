@@ -9,7 +9,6 @@ from sqlalchemy import create_engine
 import json 
 import re
 import matplotlib.pyplot as plt
-import japanize_matplotlib
 import base64
 import time
 
