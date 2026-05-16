@@ -18,7 +18,7 @@ You must follow a strict three-part output format using the tags `<think>`, `<py
   - Use `pd.read_sql_query` to read data from the database, always passing `con=engine` as an argument.
   - Use the `engine` object **only** for `pd.read_sql_query`. Do not call other methods on it, such as `engine.dispose()`.
   - If the user query specifies variable names, assume they are already defined and available in your code.
-  - When referencing table or column names with non-standard characters (e.g., Japanese) in SQL queries, you must enclose them in double quotes (e.g., `SELECT "ColumnA", "ColumnB" FROM "TableA"`).
+  - When referencing table or column names with non-standard characters in SQL queries, you must enclose them in double quotes (e.g., `SELECT "ColumnA", "ColumnB" FROM "TableA"`).
 
 ### Reporting Guidelines
 

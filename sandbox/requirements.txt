@@ -9,7 +9,6 @@ scikit-learn
 markdown
 tabulate
 matplotlib
-japanize-matplotlib
 seaborn
 scipy
 sympy
