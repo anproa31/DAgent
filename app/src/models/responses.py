@@ -20,6 +20,13 @@ class CreateSpaceResponse(BaseModel):
 class GetSpaceResponse(BaseModel):
     analysis_ids: List[str]
 
+class DeleteSpaceResponse(BaseModel):
+    success: bool
+
+class StopAnalysisResponse(BaseModel):
+    success: bool
+    error: Optional[str] = None
+
 class GetReportResponse(BaseModel):
     done: bool
     progress: str = ""

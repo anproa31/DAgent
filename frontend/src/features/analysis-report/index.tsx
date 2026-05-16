@@ -1,11 +1,11 @@
 import { useParams } from '@tanstack/react-router'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import Split from 'react-split'
 import { Main } from '@/components/layout/main'
 import { Header } from '@/components/layout/header'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { Setting } from '@/components/setting'
-import { LoaderCircle, AlertCircle,Pencil, Copy, Check } from 'lucide-react'
+import { LoaderCircle, AlertCircle, Pencil, Copy, Check } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useReport, useGetSpace, type ActionStep } from '@/hooks/use-analysis'
 import { ReportContent } from './components/report-content'
@@ -13,7 +13,8 @@ import { SidePanel } from './components/side-panel'
 import { motion, AnimatePresence } from 'framer-motion'
 import FollowupInput from './components/followup-input'
 import { useSharedAnalysisHistory } from '@/context/analysis-history-context'
-import { useStartAnalysis, useModelListByMode, type ModelInfo } from '@/hooks/use-analysis'
+import { useStartAnalysis, useModelListByMode, useStopAnalysis, type ModelInfo } from '@/hooks/use-analysis'
+import { useQueryClient } from '@tanstack/react-query'
 import { useTableList } from '@/hooks/use-table-list'
 import { toast } from 'sonner'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -34,7 +35,8 @@ function AnalysisReportItem({
   setIsProcessing,
   analysisIndex,
   onEditSubmit,
-  isGlobalSubmitting
+  isGlobalSubmitting,
+  onStop,
 }: { 
   analysisId: string
   onShowSidePanel: (content: SidePanelContentType) => void 
@@ -43,10 +45,13 @@ function AnalysisReportItem({
   analysisIndex: number
   onEditSubmit: (params: { query: string; index: number }) => Promise<void>
   isGlobalSubmitting: boolean
+  onStop?: () => void
 }) {
   const { data: report, isLoading, error } = useReport(analysisId)
 
   setIsProcessing?.(isLoading || !report?.done)
+
+  const isStopped = report?.error === "Generation stopped by user."
 
   // Added: copy state management
   const [copyState, setCopyState] = useState<'idle' | 'success' | 'error'>('idle')
@@ -54,12 +59,46 @@ function AnalysisReportItem({
   const [editValue, setEditValue] = useState('')
   const editTextareaRef = useRef<HTMLTextAreaElement | null>(null)
 
-  // Start editing
+  const adjustEditTextareaHeight = useCallback(() => {
+    const textarea = editTextareaRef.current
+    if (!textarea) return
+    const minHeight = 56
+    const maxHeight = 320
+    textarea.style.height = `${minHeight}px`
+    const newHeight = Math.max(
+      minHeight,
+      Math.min(textarea.scrollHeight, maxHeight)
+    )
+    textarea.style.height = `${newHeight}px`
+    textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden'
+  }, [])
+
+  // Auto-enter edit mode when the user stops generation
+  useEffect(() => {
+    if (isStopped && report) {
+      setEditValue(report.query || '')
+      setIsEditing(true)
+      setTimeout(() => {
+        editTextareaRef.current?.focus()
+        adjustEditTextareaHeight()
+      }, 50)
+    }
+  }, [isStopped, report, adjustEditTextareaHeight])
+
+  useEffect(() => {
+    if (isEditing) adjustEditTextareaHeight()
+  }, [isEditing, editValue, adjustEditTextareaHeight])
+
+  // Start editing — stop generation first if still running
   const startEditing = () => {
     if (!report) return
+    if (!report.done) onStop?.()
     setEditValue(report.query || '')
     setIsEditing(true)
-    setTimeout(() => editTextareaRef.current?.focus(), 0)
+    setTimeout(() => {
+      editTextareaRef.current?.focus()
+      adjustEditTextareaHeight()
+    }, 0)
   }
 
   // Cancel editing
@@ -79,7 +118,8 @@ function AnalysisReportItem({
       setIsEditing(false)
     } else if (e.key === 'Escape') {
       e.preventDefault()
-      cancelEditing()
+      // Don't allow escaping edit mode when stopped — keep the textarea open
+      if (!isStopped) cancelEditing()
     }
   }
 
@@ -134,7 +174,7 @@ function AnalysisReportItem({
     )
   }
 
-  if (report.error) {
+  if (report.error && !isStopped) {
     return (
       <div className='max-w-3xl mx-auto p-4'>
         <h2 className='text-3xl font-bold'>{report.query || 'Data Analysis'}</h2>
@@ -155,15 +195,19 @@ function AnalysisReportItem({
           <div className="flex-1">
             <textarea
               ref={editTextareaRef}
-              defaultValue={editValue}
-              onBlur={cancelEditing}
+              value={editValue}
+              onBlur={isStopped ? undefined : cancelEditing}
               onKeyDown={handleEditKeyDown}
               onChange={(e) => setEditValue(e.target.value)}
-              className="w-full resize-none rounded-md border border-border bg-background p-2 text-2xl font-bold leading-snug focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full resize-none overflow-hidden rounded-md border border-border bg-background px-3 py-3 text-2xl font-bold leading-normal focus:outline-none focus:ring-2 focus:ring-primary"
               rows={1}
               aria-label="Edit"
             />
-            <p className="mt-1 text-xs text-muted-foreground">Enter to confirm / Esc or focus out to cancel / Shift+Enter for new line</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {isStopped
+                ? 'Generation was stopped. Edit your prompt and press Enter to retry.'
+                : 'Enter to confirm / Esc or focus out to cancel / Shift+Enter for new line'}
+            </p>
           </div>
         ) : (
           <>
@@ -264,6 +308,8 @@ export default function AnalysisReport() {
   const [followupSelectedTables, setFollowupSelectedTables] = useState<string[]>([])
   const { setItemLoading } = useSharedAnalysisHistory()
   const startFollowupMutation = useStartAnalysis()
+  const stopAnalysisMutation = useStopAnalysis()
+  const queryClient = useQueryClient()
   const { data: tables, error: tablesError } = useTableList()
   const { data: modelData } = useModelListByMode(followupAgenticMode)
   const [followupStatus, setFollowupStatus] = useState<'submitted' | 'streaming' | 'ready' | 'error'>('ready')
@@ -291,9 +337,17 @@ export default function AnalysisReport() {
 
   // Update input status based on processing state
   useEffect(() => {
-    if (isProcessing) setFollowupStatus('submitted')
+    if (isProcessing) setFollowupStatus('streaming')
     else setFollowupStatus('ready')
   }, [isProcessing])
+
+  // Stop the currently running analysis
+  const handleStop = async () => {
+    const latestAnalysisId = space?.analysis_ids?.[space.analysis_ids.length - 1]
+    if (!latestAnalysisId) return
+    await stopAnalysisMutation.mutateAsync(latestAnalysisId)
+    queryClient.invalidateQueries({ queryKey: ['report', latestAnalysisId] })
+  }
 
   // Handle updates when a follow-up analysis is added
   const handleFollowupSubmitted = () => {
@@ -480,6 +534,7 @@ export default function AnalysisReport() {
                       analysisIndex={index}
                       onEditSubmit={handleEditSubmit}
                       isGlobalSubmitting={followupStatus === 'submitted'}
+                      onStop={isLast ? handleStop : undefined}
                     />
                   </div>
                 )
@@ -502,6 +557,7 @@ export default function AnalysisReport() {
             status={followupStatus}
             isprocessing={isProcessing}
             onSubmit={handleFollowupSubmit}
+            onStop={handleStop}
           />
         </div>
       )

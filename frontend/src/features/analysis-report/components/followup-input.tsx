@@ -11,6 +11,8 @@ import {
     AIInputTools,
     AIInputMultiSelectTable
 } from '@/components/ui/kibo-ui/ai-input'
+import { Button } from '@/components/ui/button'
+import { SquareIcon } from 'lucide-react'
 import { type FormEventHandler } from 'react'
 import type { ModelInfo } from '@/hooks/use-analysis'
 
@@ -30,6 +32,7 @@ export interface FollowupInputProps {
     status: 'submitted' | 'streaming' | 'ready' | 'error'
     isprocessing?: boolean
     onSubmit: (data: { text: string }) => void
+    onStop?: () => void
 }
 
 export default function FollowupInput({
@@ -44,10 +47,12 @@ export default function FollowupInput({
     tablesError,
     status,
     isprocessing,
-    onSubmit
+    onSubmit,
+    onStop,
 }: FollowupInputProps) {
     const handleSubmit: FormEventHandler<HTMLFormElement> = (e) => {
         e.preventDefault()
+        if (isprocessing) return
         if (!text.trim()) return
         onSubmit({ text: text.trim() })
     }
@@ -89,7 +94,20 @@ export default function FollowupInput({
                                 placeholder='Select Tables'
                             />
                         </AIInputTools>
-                        <AIInputSubmit disabled={disabled} status={status} />
+                        {isprocessing ? (
+                            <Button
+                                type='button'
+                                size='icon'
+                                variant='default'
+                                onClick={onStop}
+                                className='gap-1.5 rounded-lg rounded-br-xl'
+                                aria-label='Stop generation'
+                            >
+                                <SquareIcon className='h-4 w-4 fill-current' />
+                            </Button>
+                        ) : (
+                            <AIInputSubmit disabled={disabled} status={status} />
+                        )}
                     </AIInputToolbar>
                 </AIInput>
             </div>

@@ -42,6 +42,19 @@ def get_space(space_id: str) -> List[str]:
     """Retrieve the analysis ID list for the specified space_id"""
     return spaces.get(space_id, [])
 
+def delete_space(space_id: str) -> bool:
+    """Delete a space and all associated analysis states"""
+    global spaces, space_history, analysis_states
+    if space_id not in spaces:
+        return False
+    # Remove all analysis states associated with this space
+    for analysis_id in spaces[space_id]:
+        analysis_states.pop(analysis_id, None)
+    # Remove the space and its history
+    del spaces[space_id]
+    space_history.pop(space_id, None)
+    return True
+
 def start_analysis(request: StartAnalysisRequest) -> str:
     """Start an analysis and return the analysis_id"""
     global analysis_states
@@ -50,11 +63,12 @@ def start_analysis(request: StartAnalysisRequest) -> str:
     # Validate request
     _validate_request(request)
     if request.index != -1:
-        # If a history index is specified, revert history up to that index
+        # If a history index is specified, revert history up to that index.
+        # Check against spaces (not space_history) because stopped/failed analyses
+        # are added to spaces but never to space_history.
         print(f"Reverting to history index {request.index} for space {request.space_id}")
-        if 0 <= request.index < len(space_history[request.space_id]):
-            # space_history[request.space_id] = space_history[request.space_id][: (request.index)]
-            # spaces[request.space_id] = spaces[request.space_id][: request.index]
+        if 0 <= request.index < len(spaces[request.space_id]):
+            # del list[n:] is a no-op when n >= len(list), so this is always safe
             del space_history[request.space_id][request.index:]
             del spaces[request.space_id][request.index:]
         else:
@@ -68,6 +82,7 @@ def start_analysis(request: StartAnalysisRequest) -> str:
         "mode": request.mode,
         "model": request.model,
         "done": False,
+        "cancelled": False,
         "progress": "Analysis in progress...",
         "error": "",
         "python_code": "",
@@ -136,6 +151,11 @@ async def _run_analysis(space_id:str,analysis_id: str, request: StartAnalysisReq
 
         # Process the stream
         async for chunk in stream:
+            # Check for cancellation before processing each chunk
+            if state.get("cancelled"):
+                await stream.close()
+                break
+
             if chunk.choices[0].delta.content is not None:
                 content = chunk.choices[0].delta.content
                 full_response += content
@@ -160,6 +180,15 @@ async def _run_analysis(space_id:str,analysis_id: str, request: StartAnalysisReq
                 state["progress"] = "Generating report..."
                 report_buffer = _del_think_tag(full_response).split("<report>")[1]
                 state["content"] = [{"type": "markdown", "content": report_buffer}]
+
+        # If cancelled, cancel any running code task and exit
+        if state.get("cancelled"):
+            if code_task and not code_task.done():
+                code_task.cancel()
+            state["done"] = True
+            state["progress"] = ""
+            state["error"] = "Generation stopped by user."
+            return
 
         # Wait for code execution to complete (with timeout)
         if code_task and not code_task.done():
@@ -343,6 +372,17 @@ async def _parse_response_to_content(
 
     return content
 
+
+
+def stop_analysis(analysis_id: str) -> bool:
+    """Signal a running analysis to stop. Returns True if the analysis was found."""
+    global analysis_states
+    if analysis_id not in analysis_states:
+        return False
+    state = analysis_states[analysis_id]
+    if not state.get("done"):
+        state["cancelled"] = True
+    return True
 
 
 def get_analysis_state(analysis_id: str) -> Dict[str, Any]:
