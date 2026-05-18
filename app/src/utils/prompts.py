@@ -1,37 +1,71 @@
-import os
-from ..database import engine
-from ..db_to_schema import main as db_to_schema_main
+"""Prompt assembly utilities.
 
-# Load prompt files
+The legacy version pulled a PostgreSQL schema markdown blob on every
+request. After the multi-datasource refactor we instead aggregate schema
+information from the :class:`DatasourceRegistry` so the LLM is aware of
+*every* registered source (CSV, Excel, SQLite, Postgres, ...).
+"""
+from __future__ import annotations
+
+import os
+from typing import Dict, Iterable, List
+
+from ..datasource_registry import get_registry
+
+# Load prompt files (unchanged paths/contents)
 prompts_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "prompts")
 with open(os.path.join(prompts_dir, "prompt-v3.txt"), "r", encoding="utf-8") as f:
     PromptText = f.read()
 with open(os.path.join(prompts_dir, "prompt-v3+.txt"), "r", encoding="utf-8") as f:
     PromptText_with_Example = f.read()
 
-dbinfo_dir = os.path.join(prompts_dir, "dbinfo")
-databaseinfo = {}
 
-def get_db_embedded_prompt(tables = []):
+# Cached schema blocks keyed by DuckDB view name.
+databaseinfo: Dict[str, str] = {}
+
+
+def get_db_embedded_prompt(tables: Iterable[str] | None = None) -> List[str]:
+    """Return ``[PromptText_with_Example, PromptText]`` with schema injected.
+
+    ``tables`` is an optional iterable of view names to filter on.
     """
-    Retrieve DB table information and embed it into the prompt
-    """
-    dbinfo = ""
-    if len(tables) == 0:
-        # Retrieve all table information
-        tables = databaseinfo.keys()
+    tables = list(tables or [])
+    if not tables:
+        # Every registered view
+        tables = list(databaseinfo.keys())
+
+    seen: set[str] = set()
+    info_parts: List[str] = []
     for table in tables:
-        if table in databaseinfo:
-            dbinfo += databaseinfo[table]
-            dbinfo += "\n\n"
-    return [PromptText_with_Example.replace("@databaseinfo", dbinfo), PromptText.replace("@databaseinfo", dbinfo)]
+        block = databaseinfo.get(table)
+        if not block or block in seen:
+            continue
+        seen.add(block)
+        info_parts.append(block)
 
-def set_db_schema():
+    dbinfo = "\n\n".join(info_parts)
+    return [
+        PromptText_with_Example.replace("@databaseinfo", dbinfo),
+        PromptText.replace("@databaseinfo", dbinfo),
+    ]
+
+
+def set_db_schema() -> None:
+    """Refresh the cached schema map from the datasource registry."""
     global databaseinfo
-    databaseinfo = db_to_schema_main(engine)
-    if "error" in databaseinfo:
-        print("Error retrieving database schema:", databaseinfo["error"])
+    schema_by_view: Dict[str, str] = {}
+    for record in get_registry().list_datasources():
+        if not record.schema_markdown:
+            continue
+        for view_name in record.view_names:
+            schema_by_view[view_name] = record.schema_markdown
+    databaseinfo = schema_by_view
+
 
 def is_database_registered() -> bool:
-    """Check whether a database is registered"""
-    return len(databaseinfo) > 0
+    """True when at least one datasource is registered."""
+    if databaseinfo:
+        return True
+    # Fall back to a fresh registry check in case ``set_db_schema`` wasn't
+    # called recently.
+    return any(get_registry().list_datasources())

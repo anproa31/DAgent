@@ -1,6 +1,8 @@
-import { createFileRoute } from '@tanstack/react-router'
-import NewAnalysis from '@/features/new-analysis'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/_authenticated/')({
-  component: NewAnalysis,
+  beforeLoad: () => {
+    throw redirect({ to: '/agents' })
+  },
+  component: () => null,
 })

@@ -304,14 +304,13 @@ export default function AnalysisReport() {
   // Manage follow-up input state at the parent level
   const [followupText, setFollowupText] = useState<string>('')
   const [followupModel, setFollowupModel] = useState<string>('')
-  const [followupAgenticMode, setFollowupAgenticMode] = useState<boolean>(false)
   const [followupSelectedTables, setFollowupSelectedTables] = useState<string[]>([])
   const { setItemLoading } = useSharedAnalysisHistory()
   const startFollowupMutation = useStartAnalysis()
   const stopAnalysisMutation = useStopAnalysis()
   const queryClient = useQueryClient()
   const { data: tables, error: tablesError } = useTableList()
-  const { data: modelData } = useModelListByMode(followupAgenticMode)
+  const { data: modelData } = useModelListByMode(false)
   const [followupStatus, setFollowupStatus] = useState<'submitted' | 'streaming' | 'ready' | 'error'>('ready')
 
   useEffect(()=>{
@@ -378,7 +377,7 @@ export default function AnalysisReport() {
         space_id: spaceId,
         query: text.trim(),
         tables: followupSelectedTables,
-        mode: followupAgenticMode ? 'agentic' : 'standard',
+        mode: 'agentic',
         model: followupModel,
         index: -1,
       })
@@ -410,7 +409,7 @@ export default function AnalysisReport() {
         space_id: spaceId,
         query: query.trim(),
         tables: followupSelectedTables.length ? followupSelectedTables : (tables?.map(t=>t.name) ?? []),
-        mode: followupAgenticMode ? 'agentic' : 'standard',
+        mode: 'agentic',
         model: followupModel,
         index: index,
       })
@@ -548,8 +547,6 @@ export default function AnalysisReport() {
             model={followupModel}
             onModelChange={setFollowupModel}
             models={modelData?.models || []}
-            agenticMode={followupAgenticMode}
-            onAgenticModeChange={setFollowupAgenticMode}
             selectedTables={followupSelectedTables}
             onSelectedTablesChange={setFollowupSelectedTables}
             tables={tables}

@@ -1,16 +1,18 @@
 fastapi
 uvicorn[standard]
 requests
+httpx
 pydantic
 python-multipart
+markdown
+tabulate
 
-
-sqlalchemy
-psycopg2-binary
+# Multi-datasource introspection
+duckdb>=1.0.0
 pandas
-
+openpyxl
 
 openai==1.74.0
 
 numpy
-openpyxl
+

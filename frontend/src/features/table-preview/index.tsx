@@ -23,7 +23,6 @@ import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { Setting } from '@/components/setting'
-import { EditableTableName } from './components/editable-table-name'
 import { InfiniteTableDataTable } from './components/infinite-table-data-table'
 import { createTableColumns } from './components/table-columns'
 
@@ -191,16 +190,7 @@ export default function TablePreview() {
         <div className='mb-2 flex flex-col space-y-2 gap-x-4'>
           <div>
             <div className='mb-2 flex items-center space-x-2'>
-              <EditableTableName
-                tableName={tableName}
-                onSuccess={(newTableName) =>
-                  navigate({
-                    to: '/table/$tableName',
-                    params: { tableName: newTableName },
-                  })
-                }
-                className='text-2xl font-bold tracking-tight'
-              />
+              <h2 className='text-2xl font-bold tracking-tight'>{tableName}</h2>
             </div>
           </div>
           <div className='flex items-center space-x-2'>

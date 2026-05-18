@@ -30,7 +30,7 @@ const fetchTableData = async (
   params: TableDataParams = {}
 ): Promise<TableDataResponse> => {
   const response = await axios.get<TableDataResponse>(
-    `${API_BASE_URL}/api/table-data/${tableName}`,
+    `${API_BASE_URL}/api/table-data/${encodeURIComponent(tableName)}`,
     {
       params,
     }
@@ -38,25 +38,10 @@ const fetchTableData = async (
   return response.data
 }
 
-// Table deletion API
+// Delete a DuckDB view (compat shim that removes the parent datasource).
 const deleteTable = async (tableName: string): Promise<void> => {
   const response = await axios.delete(
-    `${API_BASE_URL}/api/delete-table/${tableName}`
-  )
-  console.log('Delete API response:', response.data)
-  return response.data
-}
-
-// Table rename API
-const renameTable = async (
-  tableName: string,
-  newTableName: string
-): Promise<void> => {
-  const formData = new FormData()
-  formData.append('new_table_name', newTableName)
-  const response = await axios.put(
-    `${API_BASE_URL}/api/rename-table/${tableName}`,
-    formData
+    `${API_BASE_URL}/api/delete-table/${encodeURIComponent(tableName)}`
   )
   return response.data
 }
@@ -105,34 +90,10 @@ export const useDeleteTable = () => {
   return useMutation({
     mutationFn: deleteTable,
     onSuccess: (_, tableName: string) => {
-      // Invalidate table list cache and refetch
       queryClient.invalidateQueries({ queryKey: ['tableList'] })
-      // Also remove the deleted table data from cache
+      queryClient.invalidateQueries({ queryKey: ['datasources'] })
       queryClient.removeQueries({ queryKey: ['tableData', tableName] })
       queryClient.removeQueries({ queryKey: ['infiniteTableData', tableName] })
     },
-  })
-}
-
-// Hook for table rename
-export const useRenameTable = (onError: (error: any) => void) => {
-  const queryClient = useQueryClient()
-
-  return useMutation({
-    mutationFn: ({
-      tableName,
-      newTableName,
-    }: {
-      tableName: string
-      newTableName: string
-    }) => renameTable(tableName, newTableName),
-    onSuccess: (_, { tableName }) => {
-      // Invalidate table list cache and refetch
-      queryClient.invalidateQueries({ queryKey: ['tableList'] })
-      // Remove the old table name from cache
-      queryClient.removeQueries({ queryKey: ['tableData', tableName] })
-      queryClient.removeQueries({ queryKey: ['infiniteTableData', tableName] })
-    },
-    onError: onError,
   })
 }
