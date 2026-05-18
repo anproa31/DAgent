@@ -1,6 +1,8 @@
-import { createFileRoute } from '@tanstack/react-router'
-import AnalysisEReport from '@/features/analysis-report'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/_authenticated/report/$reportId')({
-  component: AnalysisEReport,
+  beforeLoad: () => {
+    throw redirect({ to: '/agents' })
+  },
+  component: () => null,
 })

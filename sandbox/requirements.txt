@@ -1,16 +1,23 @@
 fastapi
 uvicorn[standard]
-pandas
-sqlalchemy
-psycopg2-binary # PostgreSQL driver
+httpx
 pydantic
+
+# Multi-datasource query engine
+duckdb>=1.0.0
+
+# Tabular + numerical stack used by Python sandbox code
+pandas
 numpy
-scikit-learn
+openpyxl
 markdown
 tabulate
+
+# Plotting & scientific
 matplotlib
 seaborn
 scipy
 sympy
 statsmodels
+scikit-learn
 umap-learn

@@ -1,55 +1,40 @@
 name: daa
 
 services:
-  db:
-    image: postgres:15-alpine
-    container_name: db_service
-    env_file:
-      - .dbsetting
-    networks:
-      - app_network
-    volumes:
-      - ./db:/docker-entrypoint-initdb.d
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d main_db"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    restart: always
-
-  data-analysis-agent-sandbox:
+  sandbox:
     build: ./sandbox
     container_name: sandbox_service
-    env_file:
-      - .dbsetting
     networks:
       - app_network
-    depends_on:
-      db:
-        condition: service_healthy
-
+    environment:
+      # The sandbox bootstraps datasources from the app on startup.
+      APP_SERVICE_URL: http://app:8000
+      # DuckDB database file lives on the shared volume so it survives container restarts.
+      SANDBOX_DUCKDB_PATH: /data/sandbox.duckdb
+    volumes:
+      - datasource_data:/data
     command: uvicorn main:app --host 0.0.0.0 --port 8001
 
   app:
     build:
-      context: ./app # Build context is the app directory
+      context: ./app
       dockerfile: Dockerfile
     container_name: app_service
     extra_hosts:
       - host.docker.internal:host-gateway
     ports:
       - "8073:8000"
-    env_file:
-      - .dbsetting
     environment:
       CODE_RUNNER_URL: http://sandbox:8001/
+      # Datasource registry storage (uploaded files + registry.json).
+      DATASOURCE_ROOT: /data/datasources
     networks:
       - app_network
     depends_on:
       - sandbox
-      - db
     volumes:
       - ./app/src:/usr/src/app/src
+      - datasource_data:/data
 
   agent-service:
     build:
@@ -60,8 +45,6 @@ services:
       - host.docker.internal:host-gateway
     ports:
       - "8074:8000"
-    env_file:
-      - .dbsetting
     environment:
       CODE_RUNNER_URL: http://sandbox:8001/
       APP_SERVICE_URL: http://app:8000
@@ -70,10 +53,9 @@ services:
     depends_on:
       - app
       - sandbox
-      - db
 
   frontend:
-    build: 
+    build:
       context: .
       dockerfile: frontend/Dockerfile
       args:
@@ -84,7 +66,12 @@ services:
       - "3030:3000"
     environment:
       - NODE_ENV=production
-      
+
 networks:
   app_network:
     driver: bridge
+
+volumes:
+  # Shared volume used by both ``app`` (registry + uploaded files) and the
+  # ``sandbox`` (DuckDB database file).
+  datasource_data:
