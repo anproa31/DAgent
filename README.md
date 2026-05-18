@@ -32,7 +32,8 @@ cd data-analyst-agent
 
 4. Start the application
 ```bash
-docker compose up --build -d
+docker compose -f docker-compose.dev.yml up
+docker compose -f docker-compose.dev.yml build --no-cache
 ```
 This command sets up 4 containers: **Application**, **Python+SQL Sandbox** (DuckDB-backed), **Agent Service**, and **Frontend**. Wait for all containers to start, then access "http://localhost:3030".
 

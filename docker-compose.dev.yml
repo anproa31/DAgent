@@ -1,19 +1,19 @@
 name: daa
 
 services:
-  data-analysis-agent-sandbox:
+  sandbox:
     build: ./sandbox
     container_name: sandbox_service
     networks:
       - app_network
     environment:
-      APP_SERVICE_URL: http://data-analysis-agent-app:8000
+      APP_SERVICE_URL: http://app:8000
       SANDBOX_DUCKDB_PATH: /data/sandbox.duckdb
     volumes:
       - datasource_data:/data
     command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload
 
-  data-analysis-agent-app:
+  app:
     build:
       context: ./app
       dockerfile: Dockerfile
@@ -23,18 +23,18 @@ services:
     ports:
       - "8073:8000"
     environment:
-      CODE_RUNNER_URL: http://data-analysis-agent-sandbox:8001/
+      CODE_RUNNER_URL: http://sandbox:8001/
       DATASOURCE_ROOT: /data/datasources
     networks:
       - app_network
     depends_on:
-      - data-analysis-agent-sandbox
+      - sandbox
     volumes:
       - ./app/src:/usr/src/app/src
       - datasource_data:/data
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 
-  data-analysis-agent-agent-service:
+  agent-service:
     build:
       context: ./agent-service
       dockerfile: Dockerfile
@@ -44,18 +44,18 @@ services:
     ports:
       - "8074:8000"
     environment:
-      CODE_RUNNER_URL: http://data-analysis-agent-sandbox:8001/
-      APP_SERVICE_URL: http://data-analysis-agent-app:8000
+      CODE_RUNNER_URL: http://sandbox:8001/
+      APP_SERVICE_URL: http://app:8000
     networks:
       - app_network
     depends_on:
-      - data-analysis-agent-app
-      - data-analysis-agent-sandbox
+      - app
+      - sandbox
     volumes:
       - ./agent-service:/usr/src/app
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
-  data-analysis-agent-frontend:
+  frontend:
     build:
       context: .
       dockerfile: frontend/Dockerfile.dev

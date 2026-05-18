@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-APP_SERVICE_URL = os.getenv("APP_SERVICE_URL", "http://data-analysis-agent-app:8000").rstrip("/")
+APP_SERVICE_URL = os.getenv("APP_SERVICE_URL", "http://app:8000").rstrip("/")
 
 
 async def get_schema(tables: Optional[List[str]] = None) -> str:

@@ -84,7 +84,7 @@ logger = logging.getLogger(__name__)
 DATASOURCE_ROOT = os.environ.get("DATASOURCE_ROOT", "/data/datasources")
 REGISTRY_PATH = os.path.join(DATASOURCE_ROOT, "registry.json")
 FILES_DIR = os.path.join(DATASOURCE_ROOT, "files")
-CODE_RUNNER_URL = os.environ.get("CODE_RUNNER_URL", "http://data-analysis-agent-sandbox:8001/")
+CODE_RUNNER_URL = os.environ.get("CODE_RUNNER_URL", "http://sandbox:8001/")
 
 
 # ---------------------------------------------------------------------------

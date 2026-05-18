@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-CODE_RUNNER_URL = os.getenv("CODE_RUNNER_URL", "http://data-analysis-agent-sandbox:8001/").rstrip("/")
+CODE_RUNNER_URL = os.getenv("CODE_RUNNER_URL", "http://sandbox:8001/").rstrip("/")
 
 
 async def execute_code(python_code: str, session_id: str) -> Dict[str, Any]:

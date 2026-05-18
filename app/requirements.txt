@@ -16,5 +16,4 @@ openpyxl
 openai==1.74.0
 
 numpy
-torch
-torchvision
+
