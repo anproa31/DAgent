@@ -10,6 +10,7 @@ from agents.python_agent import python_agent_node, route_after_python
 from agents.sql_agent import route_after_sql, sql_agent_node
 from agents.state import AgentState
 from agents.viz_agent import viz_agent_node
+from agents.viz_debug import viz_debug_node
 
 
 def build_graph():
@@ -23,6 +24,7 @@ def build_graph():
     builder.add_node("eda", eda_agent_node)
     builder.add_node("insight", insight_agent_node)
     builder.add_node("viz", viz_agent_node)
+    builder.add_node("viz_debug", viz_debug_node)
     builder.add_node("final_report", final_report_node)
 
     builder.set_entry_point("orchestrator")
@@ -91,7 +93,8 @@ def build_graph():
         },
     )
 
-    builder.add_edge("viz", "final_report")
+    builder.add_edge("viz", "viz_debug")
+    builder.add_edge("viz_debug", "final_report")
     builder.add_edge("final_report", END)
 
     checkpointer = MemorySaver()
