@@ -23,8 +23,6 @@ export interface FollowupInputProps {
     model: string
     onModelChange: (model: string) => void
     models: ModelInfo[]
-    agenticMode: boolean
-    onAgenticModeChange: (checked: boolean) => void
     selectedTables: string[]
     onSelectedTablesChange: (tables: string[]) => void
     tables: { name: string }[] | undefined
