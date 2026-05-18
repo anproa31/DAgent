@@ -180,6 +180,7 @@ export const AIInputButton = ({
 //submit button
 export type AIInputSubmitProps = ComponentProps<typeof Button> & {
   status?: 'submitted' | 'streaming' | 'ready' | 'error';
+  onStop?: () => void;
 };
 export const AIInputSubmit = ({
   className,
@@ -187,8 +188,26 @@ export const AIInputSubmit = ({
   size = 'icon',
   status,
   children,
+  onStop,
   ...props
 }: AIInputSubmitProps) => {
+  if (status === 'streaming' && onStop) {
+    return (
+      <Button
+        className={cn(
+          'gap-1.5 rounded-lg rounded-br-xl bg-destructive text-destructive-foreground hover:bg-destructive/90',
+          className
+        )}
+        size={size}
+        type="button"
+        variant="destructive"
+        onClick={onStop}
+      >
+        {children ?? <SquareIcon className="h-4 w-4" />}
+      </Button>
+    );
+  }
+
   let Icon = <SendIcon />;
   if (status === 'submitted') {
     Icon = <Loader2Icon className="animate-spin" />;

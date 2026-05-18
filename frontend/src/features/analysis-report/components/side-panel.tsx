@@ -214,71 +214,72 @@ function TablePanelContent({
   }
 
   return (
-    <Card className='h-full bg-background rounded-none border-0 border-l'>
-      <CardHeader className='pb-1'>
-        <CardTitle className='flex flex-col items-center justify-between text-base'>
-          <div className='flex w-full items-center justify-between'>
-            <span>
-              Table ({dataRows.length} rows × {headers.length} columns)
-            </span>
-            <div className='flex items-center gap-2'>
-              <Button onClick={onClose} variant='ghost' size='sm'>
-                <X className='h-4 w-4' />
-              </Button>
-            </div>
-          </div>
-          <div className='flex w-full items-center gap-2'>
-            <Button onClick={downloadCSV} variant='link' size='sm'>
-              <Download className='mr-2 h-4 w-4' />
-              CSV
-            </Button>
-            <Button onClick={downloadXLSX} variant='link' size='sm'>
-              <Download className='mr-2 h-4 w-4' />
-              XLSX
-            </Button>
-            <Button onClick={dowmloadTSV} variant='link' size='sm'>
-              <Download className='mr-2 h-4 w-4' />
-              TSV
-            </Button>
-              <Button onClick={copyCSV} variant='link' size='sm'>
-                <Copy className='mr-2 h-4 w-4' />
-                Copy
-              </Button>
-          </div>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className='h-[calc(100%-80px)] pt-0'>
-        <div className='h-full w-full overflow-x-scroll'>
-          <div className='rounded border'>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  {headers.map((header, index) => (
-                    <TableHead
-                      key={index}
-                      className='bg-background sticky top-0 whitespace-nowrap'
-                    >
-                      {header}
-                    </TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {dataRows.map((row, rowIndex) => (
-                  <TableRow key={rowIndex}>
-                    {row.map((cell, cellIndex) => (
-                      <TableCell key={cellIndex} className='whitespace-nowrap'>
-                        {cell}
-                      </TableCell>
-                    ))}
-                  </TableRow>
+    <div className='flex h-full min-h-0 w-full min-w-0 flex-col bg-background'>
+      {/* Header row: title + close */}
+      <div className='flex shrink-0 items-center justify-between gap-3 border-b bg-muted/50 px-4 py-3'>
+        <span className='min-w-0 truncate text-sm font-semibold text-foreground'>
+          Table ({dataRows.length} rows &times; {headers.length} columns)
+        </span>
+        <Button
+          onClick={onClose}
+          variant='outline'
+          size='sm'
+          className='h-8 shrink-0 gap-1.5'
+        >
+          <X className='h-4 w-4' />
+          Close
+        </Button>
+      </div>
+
+      {/* Export actions row */}
+      <div className='flex shrink-0 flex-wrap items-center gap-x-1 gap-y-1 border-b px-4 py-2'>
+        <Button onClick={downloadCSV} variant='link' size='sm' className='h-8'>
+          <Download className='mr-1.5 h-4 w-4' />
+          CSV
+        </Button>
+        <Button onClick={downloadXLSX} variant='link' size='sm' className='h-8'>
+          <Download className='mr-1.5 h-4 w-4' />
+          XLSX
+        </Button>
+        <Button onClick={dowmloadTSV} variant='link' size='sm' className='h-8'>
+          <Download className='mr-1.5 h-4 w-4' />
+          TSV
+        </Button>
+        <Button onClick={copyCSV} variant='link' size='sm' className='h-8'>
+          <Copy className='mr-1.5 h-4 w-4' />
+          Copy
+        </Button>
+      </div>
+
+      {/* Scrollable table area */}
+      <div className='min-h-0 flex-1 overflow-auto'>
+        <Table className='w-max min-w-full'>
+          <TableHeader>
+            <TableRow>
+              {headers.map((header, index) => (
+                <TableHead
+                  key={index}
+                  className='sticky top-0 z-10 whitespace-nowrap bg-muted/80 backdrop-blur-sm'
+                >
+                  {header}
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {dataRows.map((row, rowIndex) => (
+              <TableRow key={rowIndex}>
+                {row.map((cell, cellIndex) => (
+                  <TableCell key={cellIndex} className='whitespace-nowrap'>
+                    {cell}
+                  </TableCell>
                 ))}
-              </TableBody>
-            </Table>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
   )
 }
 

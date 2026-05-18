@@ -318,85 +318,56 @@ function TableBlock({
     stepData?: ActionStep
   }) => void
 }) {
-  // const [showPreview, setShowPreview] = useState(false)
-
-  // Parse table data in JSON format (following API spec)
-  console.log('### Table Detected:')
-  console.log(table)
   const data = JSON.parse(table) as any[]
   const columns = data.length > 0 ? Object.keys(data[0]) : []
-  const maxRows = 4
-  const previewData = data.slice(0, maxRows + 1)
+  const previewMaxRows = 4
+  const previewData = data.slice(0, previewMaxRows)
+  const hiddenRowCount = Math.max(0, data.length - previewMaxRows)
 
-  // Convert JSON to CSV
-  const convertToCSV = (jsonData: any[]) => {
-    if (jsonData.length === 0) return ''
-
-    const headers = Object.keys(jsonData[0])
-    const csvRows = [
-      headers.join(','),
-      ...jsonData.map((row) =>
-        headers
-          .map((header) => {
-            const value = row[header]
-            // CSV escaping
-            if (
-              typeof value === 'string' &&
-              (value.includes(',') ||
-                value.includes('"') ||
-                value.includes('\n'))
-            ) {
-              return `"${value.replace(/"/g, '""')}"`
-            }
-            return value
-          })
-          .join(',')
-      ),
-    ]
-    return csvRows.join('\n')
-  }
   return (
     <div>
       <div
-        className='relative transition hover:shadow'
+        className='cursor-pointer transition hover:shadow'
         onClick={() =>
-          onShowSidePanel({ type: 'table', content: convertToCSV(data) })
+          onShowSidePanel({
+            type: 'table',
+            content: table,
+          })
         }
       >
-        <div className='mb-5 max-h-96 overflow-auto rounded-xl border print:shadow-none transition-all hover:shadow-md'>
-          {/* <p>{data.length} rows of data</p> */}
-          <Table className='pointer-events-none'>
-            <TableHeader>
-              <TableRow>
-                {columns.map((header, index) => (
-                  <TableHead key={index} className='whitespace-nowrap'>
-                    {header}
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {previewData.map((row, rowIndex) => (
-                <TableRow key={rowIndex}>
-                  {columns.map((column, cellIndex) => (
-                    <TableCell key={cellIndex} className='whitespace-nowrap'>
-                      {String(row[column] || '')}
-                    </TableCell>
+        <div className='mb-5 overflow-hidden rounded-xl border print:shadow-none transition-all hover:shadow-md'>
+          <div className='max-h-96 overflow-auto'>
+            <Table className='pointer-events-none w-max'>
+              <TableHeader>
+                <TableRow>
+                  {columns.map((header, index) => (
+                    <TableHead key={index} className='whitespace-nowrap'>
+                      {header}
+                    </TableHead>
                   ))}
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          {data.length > maxRows && (
-            <div className="print:hidden pointer-events-none absolute inset-x-0 bottom-0 h-16 rounded-b-xl bg-gradient-to-t from-background via-background/80 to-transparent">
-              <div className="text-muted-foreground absolute bottom-2 mt-2 w-full text-center text-sm">
-                ... showing {data.length - maxRows} more rows
-              </div>
+              </TableHeader>
+              <TableBody>
+                {previewData.map((row, rowIndex) => (
+                  <TableRow key={rowIndex}>
+                    {columns.map((column, cellIndex) => (
+                      <TableCell key={cellIndex} className='whitespace-nowrap'>
+                        {String(row[column] || '')}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          {hiddenRowCount > 0 && (
+            <div className='print:hidden border-t bg-muted/40 px-3 py-2 text-center text-sm text-muted-foreground'>
+              … showing {hiddenRowCount} more{' '}
+              {hiddenRowCount === 1 ? 'row' : 'rows'}
             </div>
           )}
         </div>
       </div>
-     
     </div>
   )
 }
