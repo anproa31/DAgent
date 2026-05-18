@@ -26,6 +26,38 @@ export type AIResponseProps = HTMLAttributes<HTMLDivElement> & {
   children: Options['children']
 }
 const components: Options['components'] = {
+  table: ({ node, children, className, ...props }) => (
+    <div className='my-4 overflow-x-auto rounded-lg border'>
+      <table className={cn('w-full text-sm', className)} {...props}>
+        {children}
+      </table>
+    </div>
+  ),
+  thead: ({ node, children, className, ...props }) => (
+    <thead className={cn('bg-muted/50 border-b', className)} {...props}>
+      {children}
+    </thead>
+  ),
+  tbody: ({ node, children, className, ...props }) => (
+    <tbody className={cn('[&>tr:last-child]:border-0', className)} {...props}>
+      {children}
+    </tbody>
+  ),
+  tr: ({ node, children, className, ...props }) => (
+    <tr className={cn('border-b transition-colors hover:bg-muted/50', className)} {...props}>
+      {children}
+    </tr>
+  ),
+  th: ({ node, children, className, ...props }) => (
+    <th className={cn('px-3 py-2 text-left text-xs font-medium text-muted-foreground whitespace-nowrap', className)} {...props}>
+      {children}
+    </th>
+  ),
+  td: ({ node, children, className, ...props }) => (
+    <td className={cn('px-3 py-2 whitespace-nowrap', className)} {...props}>
+      {children}
+    </td>
+  ),
   ol: ({ node, children, className, ...props }) => (
     <ol className={cn('ml-4 list-outside list-decimal', className)} {...props}>
       {children}

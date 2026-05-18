@@ -35,15 +35,26 @@ async def orchestrator_node(state: AgentState) -> dict:
         json_match = re.search(r"\{.*\}", raw, re.DOTALL)
         if json_match:
             decision = json.loads(json_match.group())
+            intent = decision.get("intent", "ANALYTICAL").upper()
             pipeline = decision.get("pipeline", ["sql", "insight"])
         else:
+            intent = "ANALYTICAL"
             pipeline = ["sql", "eda", "insight", "viz"]
     except Exception as e:
         print(f"[orchestrator] LLM error, using default pipeline: {e}")
+        intent = "ANALYTICAL"
         pipeline = ["sql", "eda", "insight", "viz"]
+
+    # Enforce pipeline constraints based on intent
+    if intent == "RETRIEVAL":
+        pipeline = ["sql"]
+        print(f"[orchestrator] RETRIEVAL intent detected — lightweight pipeline")
+    else:
+        print(f"[orchestrator] ANALYTICAL intent — full pipeline: {pipeline}")
 
     return {
         "schema_info": schema_info,
+        "intent": intent,
         "pipeline": pipeline,
         "current_agent": "orchestrator",
         "agent_steps": state.get("agent_steps", []) + ["orchestrator"],

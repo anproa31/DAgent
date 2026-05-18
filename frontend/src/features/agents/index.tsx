@@ -416,7 +416,7 @@ export default function AgentsPage() {
       <AIInputTextarea
         onChange={(e) => setQuery(e.target.value)}
         value={query}
-        placeholder='Describe your analysis task, or pick a preset from the left panel...'
+        placeholder='Describe your analysis task'
         disabled={isRunning}
       />
       <AIInputToolbar>
