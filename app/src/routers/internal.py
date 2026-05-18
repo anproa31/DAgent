@@ -4,6 +4,10 @@ Returns the multi-datasource schema map keyed by DuckDB view name. Each
 value is the rendered Markdown schema block for the *whole* datasource
 that view belongs to, so the agent-service can reason about adjacent
 tables when relevant.
+
+``GET /internal/schema`` also exposes semantic context from the context-engine:
+a top-level ``context`` blob (all matching datasources), and
+``context_by_view`` aligned with the ``schema`` keys for per-view lookups.
 """
 from __future__ import annotations
 
@@ -18,38 +22,51 @@ router = APIRouter(prefix="/internal")
 
 @router.get("/schema")
 async def get_schema(tables: Optional[str] = Query(None)) -> Dict[str, Any]:
-    """Return the schema markdown keyed by view name + a combined block.
+    """Return schema markdown and semantic context keyed by DuckDB view name.
 
-    ``tables`` is an optional comma-separated list of view names to filter.
-    The combined block (``combined``) folds in cross-datasource join hints
-    so multi-CSV setups still get join candidates surfaced to the LLM.
+    **Response fields**
+
+    - ``schema``: markdown schema per view (full datasource block repeated per view).
+    - ``context_by_view``: context-engine markdown for the datasource that owns each
+      view (same keys as ``schema``; empty string when no context was built).
+    - ``context``: all distinct datasource context summaries that match the filter,
+      concatenated (same selection rules as ``combined`` for which datasources appear;
+      may include summaries for datasources that have context but no ``schema`` block).
+    - ``combined``: context + schema + cross-datasource join hints (see registry).
+
+    ``tables`` is an optional comma-separated list of view names to limit which
+    views (and their datasources) are included.
     """
     registry = get_registry()
+    requested_views: Optional[List[str]] = None
+    if tables:
+        requested_views = [t.strip() for t in tables.split(",") if t.strip()]
+
     schema_by_view: Dict[str, str] = {}
+    context_by_view: Dict[str, str] = {}
     for record in registry.list_datasources():
         if not record.schema_markdown:
             continue
         for view_name in record.view_names:
+            if requested_views is not None and view_name not in requested_views:
+                continue
             schema_by_view[view_name] = record.schema_markdown
-
-    requested_views: Optional[List[str]] = None
-    if tables:
-        requested_views = [t.strip() for t in tables.split(",") if t.strip()]
-        schema_by_view = {k: v for k, v in schema_by_view.items() if k in requested_views}
+            context_by_view[view_name] = record.context_summary or ""
 
     combined = registry.aggregate_schema_markdown(view_names=requested_views)
 
-    # Collect context summaries from included datasources
     context_parts: List[str] = []
     for record in registry.list_datasources():
-        if record.context_summary:
-            if requested_views is None or any(v in requested_views for v in record.view_names):
-                context_parts.append(record.context_summary)
+        if not record.context_summary:
+            continue
+        if requested_views is None or any(v in requested_views for v in record.view_names):
+            context_parts.append(record.context_summary)
 
     return {
         "schema": schema_by_view,
         "combined": combined,
         "context": "\n\n".join(context_parts) if context_parts else "",
+        "context_by_view": context_by_view,
     }
 
 

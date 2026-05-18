@@ -2,7 +2,12 @@ import json
 import re
 
 from agents.state import AgentState
-from services.schema_service import get_datasources, get_schema
+from services.context_engine import get_enhanced_context
+from services.schema_service import (
+    combined_markdown_from_payload,
+    fetch_schema_payload,
+    get_datasources,
+)
 from utils.llm_client import chat_complete, get_async_client
 from utils.prompts import ORCHESTRATOR_SYSTEM
 
@@ -52,12 +57,32 @@ async def orchestrator_node(state: AgentState) -> dict:
     """
     print(f"[orchestrator] query={state['query'][:80]}")
 
-    # Schema (markdown) + structured datasource list run together.
-    schema_info = state.get("schema_info", "")
+    # Schema (markdown) + aggregated semantic context + structured datasource list.
+    tables_arg = state.get("tables")
+    schema_payload = await fetch_schema_payload(tables_arg)
+
+    schema_info = (state.get("schema_info") or "").strip()
     if not schema_info:
-        schema_info = await get_schema(state.get("tables"))
+        if schema_payload:
+            schema_info = combined_markdown_from_payload(schema_payload, tables_arg)
+        else:
+            schema_info = "Schema unavailable"
 
     datasources = state.get("datasources") or await get_datasources()
+
+    raw_context = ""
+    if schema_payload:
+        ctx = schema_payload.get("context")
+        if isinstance(ctx, str):
+            raw_context = ctx
+
+    fallback_enhanced = raw_context.strip() or schema_info
+    enhanced_context = await get_enhanced_context(
+        raw_context,
+        state.get("query", ""),
+        datasources=datasources or None,
+        fallback=fallback_enhanced,
+    )
 
     quick_intent = _quick_classify(state.get("query", ""))
     intent = "RETRIEVAL"  # safer default than ANALYTICAL — fewer side-quests
@@ -124,6 +149,7 @@ async def orchestrator_node(state: AgentState) -> dict:
 
     return {
         "schema_info": schema_info,
+        "enhanced_context": enhanced_context,
         "datasources": datasources,
         "intent": intent,
         "execution_mode": execution_mode,

@@ -7,6 +7,15 @@ DuckDB-native views, so the SQL agent can answer questions across
 heterogeneous sources without any data copying.
 """
 
+
+def format_semantic_context_for_prompt(enhanced_context: str) -> str:
+    """Normalize ``state['enhanced_context']`` for ``{context}`` in agent prompts."""
+    text = (enhanced_context or "").strip()
+    if not text:
+        return "(No supplementary semantic context. Rely on the datasource schema below.)"
+    return text
+
+
 ORCHESTRATOR_SYSTEM = """You are an analytics orchestration agent. Given a user query, the available datasources, and their schemas, you must:
 1. Classify the user's INTENT
 2. Choose an execution MODE (sql | python)
@@ -79,6 +88,9 @@ SQL_AGENT_SYSTEM = """You are a DuckDB SQL expert. Generate a precise SQL query 
 
 The sandbox runs a single DuckDB session. Each registered datasource is exposed as one or more views. Every CSV file, Excel sheet, SQLite table, and PostgreSQL table is a regular DuckDB view — you SELECT from the view name without needing any FROM-clause prefix.
 
+Semantic context (table grain, column roles, relationships — tightened to the user's question when available):
+{context}
+
 Datasource schema (each block describes one registered datasource):
 {schema}
 
@@ -109,6 +121,9 @@ Execution environment:
 - Every registered datasource is a DuckDB view. To load one into a DataFrame: ``df = duckdb_conn.execute('SELECT * FROM "view_name"').fetchdf()``.
 - ``pd``, ``np``, ``plt`` are pre-imported.
 
+Semantic context:
+{context}
+
 Datasource schema:
 {schema}
 
@@ -122,6 +137,9 @@ Wrap the ENTIRE code block in ``<python>...</python>`` tags. Only output the tag
 """
 
 EDA_AGENT_SYSTEM = """You are a data analysis expert performing exploratory data analysis.
+
+Semantic context:
+{context}
 
 Datasource schema:
 {schema}
@@ -141,6 +159,7 @@ Be factual and specific. Use numbers from the data summary.
 INSIGHT_AGENT_SYSTEM = """You are a business intelligence expert. Generate actionable insights from data analysis.
 
 Original Question: {query}
+Semantic context: {context}
 Datasource schema: {schema}
 Data Summary: {data_summary}
 EDA Findings: {eda_summary}
@@ -161,6 +180,9 @@ Execution environment:
 - DuckDB connection is available as ``duckdb_conn`` — use it to fetch any data you need with ``duckdb_conn.execute(sql).fetchdf()``.
 - If the previous step stored a DataFrame in ``df_result``, you can use it directly.
 - ``pd``, ``np``, ``plt`` are pre-imported.
+
+Semantic context:
+{context}
 
 Datasource schema:
 {schema}

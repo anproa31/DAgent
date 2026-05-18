@@ -228,6 +228,7 @@ async def start_run(session_id: str, body: StartRunRequest):
         "base_url": body.base_url,
         "api_key": body.api_key,
         "schema_info": "",
+        "enhanced_context": "",
         "datasources": [],
         "intent": "",
         "execution_mode": "",
