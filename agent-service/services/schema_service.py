@@ -1,31 +1,71 @@
+"""Schema retrieval client for the agent service.
+
+The app service exposes two endpoints:
+
+- ``/internal/schema`` — markdown blocks keyed by DuckDB view name.
+- ``/internal/datasources`` — structured datasource list with kind/type.
+
+The orchestrator uses the structured list to decide between SQL- and
+Python-first pipelines (e.g. a CSV is naturally tabular, a PDF is not).
+"""
+from __future__ import annotations
+
 import os
+from typing import Any, Dict, List, Optional
+
 import httpx
-from typing import Dict, Optional
 
-APP_SERVICE_URL = os.getenv("APP_SERVICE_URL", "http://data-analysis-agent-app:8000")
+APP_SERVICE_URL = os.getenv("APP_SERVICE_URL", "http://data-analysis-agent-app:8000").rstrip("/")
 
 
-async def get_schema(tables: Optional[list] = None) -> str:
-    """Fetch schema markdown from app/ internal endpoint."""
+async def get_schema(tables: Optional[List[str]] = None) -> str:
+    """Fetch schema markdown from the app's internal endpoint.
+
+    Prefer the pre-rendered ``combined`` block when available — it folds
+    in cross-datasource join hints that the per-view dict cannot express.
+    Falls back to per-view de-duplication for older app versions.
+    """
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            params = {}
+            params: Dict[str, str] = {}
             if tables:
                 params["tables"] = ",".join(tables)
-            response = await client.get(
-                f"{APP_SERVICE_URL}/internal/schema",
-                params=params,
-            )
+            response = await client.get(f"{APP_SERVICE_URL}/internal/schema", params=params)
             response.raise_for_status()
             data = response.json()
+
+            combined = data.get("combined")
+            if isinstance(combined, str) and combined.strip():
+                return combined
+
             schema_parts = data.get("schema", {})
             if isinstance(schema_parts, dict):
-                # Filter to requested tables if specified
                 if tables:
                     filtered = {k: v for k, v in schema_parts.items() if k in tables}
-                    return "\n\n".join(filtered.values()) if filtered else "\n\n".join(schema_parts.values())
-                return "\n\n".join(schema_parts.values())
+                    blocks = filtered.values() if filtered else schema_parts.values()
+                else:
+                    blocks = schema_parts.values()
+                seen: set[str] = set()
+                unique_blocks: List[str] = []
+                for block in blocks:
+                    if block and block not in seen:
+                        seen.add(block)
+                        unique_blocks.append(block)
+                return "\n\n".join(unique_blocks) if unique_blocks else "No schema registered"
             return str(schema_parts)
-    except Exception as e:
-        print(f"[schema_service] Failed to fetch schema: {e}")
+    except Exception as exc:
+        print(f"[schema_service] Failed to fetch schema: {exc}")
         return "Schema unavailable"
+
+
+async def get_datasources() -> List[Dict[str, Any]]:
+    """Return the structured datasource list (kind/type/views)."""
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(f"{APP_SERVICE_URL}/internal/datasources")
+            response.raise_for_status()
+            data = response.json()
+            return list(data.get("datasources", []))
+    except Exception as exc:
+        print(f"[schema_service] Failed to fetch datasources: {exc}")
+        return []

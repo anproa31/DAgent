@@ -1,36 +1,55 @@
-import axios from 'axios'
 import { useQuery } from '@tanstack/react-query'
-
-const API_BASE_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:8000'
+import {
+  type DatasourceRecord,
+  type DatasourceType,
+  listDatasources,
+} from '@/api/datasources'
 
 export interface TableInfo {
+  /** DuckDB view / table name the sandbox exposes. */
   name: string
+  /** Route to the table preview page. */
   url: string
+  /** Parent datasource id. */
+  datasourceId: string
+  /** Parent datasource display name. */
+  datasourceName: string
+  /** Datasource type (csv, excel, sqlite, parquet, postgres, mysql, ...). */
+  datasourceType: DatasourceType
 }
 
-interface TableListResponse {
-  table_count: number
-  table_names: string[]
-  message: string
+/**
+ * Flatten registered datasources into the per-view list the rest of the
+ * frontend expects. Each `view_name` becomes a `TableInfo`, but we keep a
+ * reference back to the owning datasource so the UI can group/label rows
+ * by their original source.
+ */
+const flattenDatasources = (records: DatasourceRecord[]): TableInfo[] => {
+  const tables: TableInfo[] = []
+  for (const record of records) {
+    for (const viewName of record.view_names) {
+      tables.push({
+        name: viewName,
+        url: `/table/${viewName}`,
+        datasourceId: record.id,
+        datasourceName: record.name,
+        datasourceType: record.type,
+      })
+    }
+  }
+  return tables
 }
 
 const fetchTableList = async (): Promise<TableInfo[]> => {
-  const response = await axios.get<TableListResponse>(
-    `${API_BASE_URL}/api/get-table-list`
-  )
-
-  // Convert table_names to TableInfo format
-  return response.data.table_names.map((tableName) => ({
-    name: tableName,
-    url: `/table/${tableName}`, // Generate URL using the table name
-  }))
+  const records = await listDatasources()
+  return flattenDatasources(records)
 }
 
 export const useTableList = () => {
   return useQuery({
     queryKey: ['tableList'],
     queryFn: fetchTableList,
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   })
 }

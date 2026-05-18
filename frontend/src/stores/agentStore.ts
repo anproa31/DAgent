@@ -46,10 +46,14 @@ interface AgentStore {
    * intentionally let go of.
    */
   cancelledRunIds: string[]
+  /** Selected tables per session — persisted so navigating back restores the selection. */
+  sessionTables: Record<string, string[]>
 
   setSessionId: (id: string) => void
   resetSession: () => void
   setPreferredModel: (model: string) => void
+  setSessionTables: (sessionId: string, tables: string[]) => void
+  getSessionTables: (sessionId: string) => string[] | undefined
 
   addRun: (runId: string, sessionId: string, query: string) => void
   setPhase: (runId: string, phase: RunPhase) => void
@@ -93,12 +97,20 @@ export const useAgentStore = create<AgentStore>()(
       activeRunId: null,
       preferredModel: '',
       cancelledRunIds: [],
+      sessionTables: {},
 
       setSessionId: (id) => set({ sessionId: id }),
 
       resetSession: () => set({ sessionId: null, runs: [], activeRunId: null }),
 
       setPreferredModel: (model) => set({ preferredModel: model }),
+
+      setSessionTables: (sessionId, tables) =>
+        set((s) => ({
+          sessionTables: { ...s.sessionTables, [sessionId]: tables },
+        })),
+
+      getSessionTables: (sessionId) => get().sessionTables[sessionId],
 
       addRun: (runId, sessionId, query) => {
         const run: AgentRun = {
@@ -241,11 +253,10 @@ export const useAgentStore = create<AgentStore>()(
     {
       name: 'agent-store',
       storage: createJSONStorage(() => localStorage),
-      // Persist model preference + cancelled-run ids so reloads stay sane.
-      // Session/run state stays in-memory and is rehydrated from the API.
       partialize: (state) => ({
         preferredModel: state.preferredModel,
         cancelledRunIds: state.cancelledRunIds,
+        sessionTables: state.sessionTables,
       }),
     }
   )

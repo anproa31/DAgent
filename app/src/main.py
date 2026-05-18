@@ -1,16 +1,22 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import asyncio
-from .routers import data_router, health_router, new_analysis_router, model_list_router, internal_router
+
+from .routers import (
+    data_router,
+    health_router,
+    internal_router,
+    model_list_router,
+    new_analysis_router,
+)
 from .utils.prompts import set_db_schema
 
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Check this value as needed
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # Ensure OPTIONS method is allowed
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
@@ -21,8 +27,8 @@ app.include_router(new_analysis_router)
 app.include_router(model_list_router)
 app.include_router(internal_router)
 
-# Set up the database schema on application startup
+
 @app.on_event("startup")
-async def startup_event():
-    # Configure the database schema
+async def startup_event() -> None:
+    """Warm the prompt cache from the datasource registry."""
     set_db_schema()

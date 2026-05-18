@@ -20,11 +20,11 @@ import { ThemeSwitch } from '@/components/theme-switch'
 import { Setting } from '@/components/setting'
 import { useStartAnalysis, useModelListByMode, ModelInfo, useCreateSpace, useGenerateTitle } from '@/hooks/use-analysis'
 import { useGlobalFileDrop } from '@/hooks/use-global-file-drop'
-import { useQueryClient } from '@tanstack/react-query'
 import { useSharedAnalysisHistory } from '@/context/analysis-history-context' // TODO: Replace with useContext.
 import { AnimatedBeam } from "@/components/magicui/animated-beam";
 import { Database, X, Loader2 } from 'lucide-react';
 import { useTableList } from '@/hooks/use-table-list'
+import { useUploadDatasourceFiles } from '@/hooks/use-datasources'
 import { Badge } from '@/components/ui/badge'
 // import { Alert, AlertDescription } from '@/components/ui/alert'
 
@@ -38,11 +38,11 @@ import {
 
 export default function NewAnalysis() {
   const { data: tables, isLoading, error } = useTableList()
-  const queryClient = useQueryClient()
   const navigate = useNavigate()
   const startAnalysisMutation = useStartAnalysis()
   const createSpaceMutation = useCreateSpace()
   const generateTitleMutation = useGenerateTitle()
+  const uploadDatasourcesMutation = useUploadDatasourceFiles()
   const { addToHistory } = useSharedAnalysisHistory()
 
   const [text, setText] = useState<string>('');
@@ -52,48 +52,34 @@ export default function NewAnalysis() {
     'submitted' | 'streaming' | 'ready' | 'error'
   >('ready');
   const [selectedTables, setSelectedTables] = useState<string[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
 
-  // API base URL (consistent with other files)
-  const API_BASE_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:8000'
+  const isUploading = uploadDatasourcesMutation.isPending
 
-  const invalidateTableQueries = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ['tableList'] })
-    queryClient.invalidateQueries({ queryKey: ['tableData'] })
-  }, [queryClient])
+  const SUPPORTED_FILE_REGEX = /(\.csv|\.xlsx|\.xls|\.parquet|\.db|\.sqlite|\.sqlite3|\.duckdb)$/i
 
   const handleGlobalFiles = useCallback(async (droppedFiles: File[]) => {
-    // Allow only CSV / XLSX (extension check)
-    const valid = droppedFiles.filter(f => /(\.csv|\.xlsx|\.xls)$/i.test(f.name))
-    const rejected = droppedFiles.filter(f => !/(\.csv|\.xlsx|\.xls)$/i.test(f.name))
+    const valid = droppedFiles.filter(f => SUPPORTED_FILE_REGEX.test(f.name))
+    const rejected = droppedFiles.filter(f => !SUPPORTED_FILE_REGEX.test(f.name))
     if (rejected.length > 0) {
-      toast.error(`Unsupported files excluded: ${rejected.map(f=>f.name).join(', ')}`)
+      toast.error(`Unsupported files excluded: ${rejected.map(f => f.name).join(', ')}`)
     }
     if (valid.length === 0) return
 
-    setIsUploading(true)
-    const formData = new FormData()
-    valid.forEach(f => formData.append('files', f))
     try {
-      toast.message('Starting file upload', { description: `Processing ${valid.length} file(s)...` })
-      const res = await fetch(`${API_BASE_URL}/api/upload-csv-xlsx`, { method: 'POST', body: formData })
-      if (!res.ok) {
-        const data = await res.json().catch(()=>({ detail: 'Upload failed' }))
-        throw new Error(data.detail || 'Upload failed')
+      toast.message('Registering datasources', { description: `Introspecting ${valid.length} file(s)...` })
+      const result = await uploadDatasourcesMutation.mutateAsync(valid)
+      const newViews = result.datasources.flatMap(d => d.view_names)
+      if (newViews.length > 0) {
+        setSelectedTables(prev => Array.from(new Set([...prev, ...newViews])))
       }
-      const data = await res.json()
-      // Add newly created tables to the current selection (deduplicate)
-      if (Array.isArray(data.table_names)) {
-        setSelectedTables(prev => Array.from(new Set([...prev, ...data.table_names])))
-      }
-      toast.success(data.message || 'Loaded files')
-      invalidateTableQueries()
+      toast.success(result.message || `Registered ${result.datasources.length} datasource(s)`)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Error during file upload')
-    } finally {
-      setIsUploading(false)
+      const message =
+        (e as { response?: { data?: { detail?: string } }; message?: string })?.response?.data?.detail
+        || (e instanceof Error ? e.message : 'Error during file upload')
+      toast.error(message)
     }
-  }, [API_BASE_URL, invalidateTableQueries])
+  }, [uploadDatasourcesMutation])
 
   const { isDragging } = useGlobalFileDrop(handleGlobalFiles)
 
@@ -216,11 +202,11 @@ export default function NewAnalysis() {
         {isDragging && (
           <div className='fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm border-4 border-dashed border-primary pointer-events-none'>
             <p className='text-2xl font-semibold mb-2'>Drop files here</p>
-            <p className='text-muted-foreground'>Upload CSV / XLSX to add tables</p>
+            <p className='text-muted-foreground'>CSV · Excel · Parquet · SQLite · DuckDB</p>
           </div>
         )}
         {isUploading && (
-          <div className='fixed bottom-4 right-4 z-50 rounded-md bg-primary/90 px-4 py-2 text-sm text-primary-foreground shadow'>Uploading...</div>
+          <div className='fixed bottom-4 right-4 z-50 rounded-md bg-primary/90 px-4 py-2 text-sm text-primary-foreground shadow'>Registering datasource...</div>
         )}
         <TooltipProvider>
           <div className='w-full h-[80%] flex flex-col items-center pt-[calc(50vh-270px)]'>
