@@ -34,7 +34,12 @@ cd data-analyst-agent
 ```bash
 docker compose up --build -d
 ```
-This command sets up 3 containers(Application, Python Sandbox, PostgresDB). Wait for starting up all containers, Access "http://localhost:3030".
+This command sets up 4 containers: **Application**, **Python+SQL Sandbox** (DuckDB-backed), **Agent Service**, and **Frontend**. Wait for all containers to start, then access "http://localhost:3030".
+
+> **Datasource storage:** Uploaded files (CSV, Excel, SQLite, Parquet) and the
+> registry manifest live on a shared Docker volume named `datasource_data`. The
+> sandbox queries them in-place through DuckDB — there is no longer a separate
+> PostgreSQL container.
 You can use any LLM provider’s model by setting the base_url and api_key from the settings icon in the top right (by default, Ollama is used).
 - ollama (default)
 - llama.cpp
@@ -95,29 +100,49 @@ Sample queries:
 5. Analyze the correlation between **Relationship Satisfaction with Manager** and **Years with Current Manager**.
 6. Perform a **t-test** to test whether there is a difference in **Job Satisfaction** between employees who have worked at **one or more previous companies** and those who have worked at **none**.
 
-### Uploadable data type
-Following type of data can be uploaded from web UI.
-- CSV file
-- EXCEL file
-- SQlite db file
+### Supported datasource types
+The following datasource types can be registered through the web UI or via
+the `/api/datasources/*` endpoints. They are queried in-place — files stay on
+disk and remote databases are attached, never copied:
 
-Once you upload files, the data will be converted into data table and stored in container volume.
+- **Files**: CSV, Excel (.xlsx / .xls — one view per sheet), SQLite (`.db` / `.sqlite`), Parquet
+- **Databases**: PostgreSQL, MySQL, DuckDB
 
-### Connect to Database with connection string (Preview)
-Normally, uploaded data is stored in the volume of the Postgres container, but you can also execute SQL directly against an external database. A connection string with read permissions is required. (Since unexpected changes may occur, it is recommended to use a user with read-only permissions.)
+Each datasource is exposed in the sandbox as one or more DuckDB views, so the
+SQL agent (and any Python code) can query CSVs, Excel sheets, and a live
+Postgres database in the same query without prior ETL.
 
-1. Stop containers if running
+### Connect to an external database
+Use the new datasource endpoint with a structured payload:
+
 ```bash
-docker compose down -v
+curl -X POST http://localhost:8073/api/datasources/connect \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "analytics_pg",
+    "type": "postgres",
+    "host": "your-host",
+    "port": 5432,
+    "database": "analytics",
+    "user": "readonly_user",
+    "password": "secret"
+  }'
 ```
-2. Set connection string in .env file
+
+Or via a connection string:
+
 ```bash
-echo "USER_DATABASE_URL=postgresql://postgres:mysecretpassword@localhost:5432/mydatabase" >> .env
+curl -X POST http://localhost:8073/api/datasources/connect \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "analytics_pg",
+    "type": "postgres",
+    "connection_string": "postgresql://user:pass@host:5432/db"
+  }'
 ```
-3. Start container
-```bash
-docker compose up --build -d
-```
+
+Read-only credentials are still recommended — DuckDB attaches the database in
+`READ_ONLY` mode by default for Postgres and MySQL.
 
 ## Contribution
  If you find bugs or have ideas, please share them in via GitHub Issues. For more information on contributing to data-analysis-agent you can read the [CONTRIBUTING.md](CONTRIBUTING.md) file to learn more about data-analysis-agent and how you can contribute to it.

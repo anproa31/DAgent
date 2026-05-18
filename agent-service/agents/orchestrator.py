@@ -1,70 +1,161 @@
 import json
 import re
+
 from agents.state import AgentState
-from utils.llm_client import get_async_client, chat_complete
+from services.schema_service import get_datasources, get_schema
+from utils.llm_client import chat_complete, get_async_client
 from utils.prompts import ORCHESTRATOR_SYSTEM
-from services.schema_service import get_schema
+
+
+# Regex patterns that strongly indicate a pure retrieval query. These take
+# precedence over the LLM classifier because borderline phrasings like
+# "show me 5 employees information" tend to flip the LLM to ANALYTICAL even
+# though the user clearly just wants the rows.
+_RETRIEVAL_PATTERNS = [
+    re.compile(r"^\s*(show|list|display|print|return|give\s+me|fetch|get|find)\b", re.I),
+    re.compile(r"\b(first|last|top|bottom)\s+\d+\b", re.I),
+    re.compile(r"\b\d+\s+(rows?|records?|entries|employees?|customers?|orders?|items?|users?|rows|records)\b", re.I),
+    re.compile(r"^\s*(how many|count\s+of|number\s+of|total\s+number)\b", re.I),
+    re.compile(r"^\s*(what\s+(?:is|are)\s+the)\s+", re.I),
+]
+
+# Strong analytical signals — if any match we must not short-circuit to RETRIEVAL.
+_ANALYTICAL_PATTERNS = [
+    re.compile(r"\b(why|how come|reason|cause|driver|correlat|trend|forecast|predict|insight|analy[sz]e|analysis|pattern|distribution|outlier|cluster|segment|t[\s-]?test|chi[\s-]?square|anova|regression|hypothesis|p[\s-]?value|significance)\b", re.I),
+    re.compile(r"\b(compare|breakdown|over\s+time|by\s+\w+\s+over)\b", re.I),
+    re.compile(r"\b(plot|chart|visuali[sz]e|graph|histogram|scatter|heatmap|bar\s+chart)\b", re.I),
+    re.compile(r"\b(summary|summari[sz]e|report)\b", re.I),
+]
+
+
+def _quick_classify(query: str) -> str:
+    """Deterministic retrieval-vs-analytical heuristic.
+
+    Returns ``"RETRIEVAL"``, ``"ANALYTICAL"`` or ``""`` (unknown).
+    Used as a guard rail so the LLM cannot drift on obviously simple
+    look-up queries.
+    """
+    if not query or len(query.strip()) < 3:
+        return ""
+    if any(p.search(query) for p in _ANALYTICAL_PATTERNS):
+        return "ANALYTICAL"
+    if any(p.search(query) for p in _RETRIEVAL_PATTERNS):
+        return "RETRIEVAL"
+    return ""
 
 
 async def orchestrator_node(state: AgentState) -> dict:
-    """Analyse the query, fetch schema, and decide which pipeline to run."""
+    """Analyse the query, fetch schema + datasources, and choose the pipeline.
+
+    Decides between an SQL-first and a Python-first execution path based on
+    the question and the kinds of datasources registered.
+    """
     print(f"[orchestrator] query={state['query'][:80]}")
 
-    # Fetch schema if not already present
+    # Schema (markdown) + structured datasource list run together.
     schema_info = state.get("schema_info", "")
     if not schema_info:
         schema_info = await get_schema(state.get("tables"))
 
-    client = get_async_client(state.get("base_url", ""), state.get("api_key", ""))
-    model = state.get("model", "")
+    datasources = state.get("datasources") or await get_datasources()
 
-    messages = [
-        {"role": "system", "content": ORCHESTRATOR_SYSTEM},
-        {
-            "role": "user",
-            "content": (
-                f"Database schema:\n{schema_info}\n\n"
-                f"User query: {state['query']}"
-            ),
-        },
-    ]
+    quick_intent = _quick_classify(state.get("query", ""))
+    intent = "RETRIEVAL"  # safer default than ANALYTICAL — fewer side-quests
+    pipeline = ["sql"]
+    execution_mode = "sql"
 
-    try:
-        raw = await chat_complete(client, model, messages, temperature=0.1)
-        # Extract JSON from response (handle markdown fences)
-        json_match = re.search(r"\{.*\}", raw, re.DOTALL)
-        if json_match:
-            decision = json.loads(json_match.group())
-            intent = decision.get("intent", "ANALYTICAL").upper()
-            pipeline = decision.get("pipeline", ["sql", "insight"])
-        else:
-            intent = "ANALYTICAL"
-            pipeline = ["sql", "eda", "insight", "viz"]
-    except Exception as e:
-        print(f"[orchestrator] LLM error, using default pipeline: {e}")
-        intent = "ANALYTICAL"
-        pipeline = ["sql", "eda", "insight", "viz"]
-
-    # Enforce pipeline constraints based on intent
-    if intent == "RETRIEVAL":
-        pipeline = ["sql"]
-        print(f"[orchestrator] RETRIEVAL intent detected — lightweight pipeline")
+    if quick_intent == "RETRIEVAL":
+        # Deterministic short-circuit: obvious lookup queries skip the LLM
+        # classifier entirely so the agent doesn't tack on EDA/insight/viz.
+        print("[orchestrator] quick-classified as RETRIEVAL, skipping LLM router")
     else:
-        print(f"[orchestrator] ANALYTICAL intent — full pipeline: {pipeline}")
+        client = get_async_client(state.get("base_url", ""), state.get("api_key", ""))
+        model = state.get("model", "")
+
+        datasources_summary = "\n".join(
+            f"- {ds.get('name')} ({ds.get('kind')}/{ds.get('type')}) "
+            f"with views: {', '.join(ds.get('view_names', []))}"
+            for ds in datasources
+        ) or "(no datasources registered)"
+
+        messages = [
+            {"role": "system", "content": ORCHESTRATOR_SYSTEM},
+            {
+                "role": "user",
+                "content": (
+                    f"Registered datasources:\n{datasources_summary}\n\n"
+                    f"Datasource schema:\n{schema_info}\n\n"
+                    f"User query: {state['query']}"
+                ),
+            },
+        ]
+
+        try:
+            raw = await chat_complete(client, model, messages, temperature=0.1)
+            match = re.search(r"\{.*\}", raw, re.DOTALL)
+            if match:
+                decision = json.loads(match.group())
+                intent = decision.get("intent", intent).upper()
+                execution_mode = decision.get("execution_mode", execution_mode).lower()
+                pipeline = decision.get("pipeline", pipeline)
+        except Exception as exc:
+            print(f"[orchestrator] LLM error, using defaults: {exc}")
+
+        # Strong analytical signals override an LLM "RETRIEVAL" classification
+        # (e.g. when the user asks "why are employees leaving?" with a count
+        # context, the LLM sometimes returns RETRIEVAL).
+        if quick_intent == "ANALYTICAL" and intent != "ANALYTICAL":
+            print("[orchestrator] heuristic forced ANALYTICAL (matched analytical keywords)")
+            intent = "ANALYTICAL"
+            if pipeline == ["sql"]:
+                pipeline = ["sql", "eda", "insight", "viz"]
+
+    # Enforce a deterministic execution-mode token
+    if execution_mode not in ("sql", "python"):
+        execution_mode = "sql"
+
+    # Pipeline normalisation: the first step must be a data-fetch step that
+    # matches the chosen execution mode.
+    pipeline = _normalise_pipeline(pipeline, execution_mode, intent)
+
+    print(
+        f"[orchestrator] intent={intent} mode={execution_mode} pipeline={pipeline}"
+    )
 
     return {
         "schema_info": schema_info,
+        "datasources": datasources,
         "intent": intent,
+        "execution_mode": execution_mode,
         "pipeline": pipeline,
         "current_agent": "orchestrator",
         "agent_steps": state.get("agent_steps", []) + ["orchestrator"],
     }
 
 
+def _normalise_pipeline(pipeline: list, execution_mode: str, intent: str) -> list:
+    """Ensure the first step matches ``execution_mode`` and is followed by sensible follow-ups."""
+    valid = {"sql", "python", "eda", "insight", "viz"}
+    pipeline = [step for step in pipeline if step in valid]
+
+    # Replace whichever data-fetch step the LLM picked with the chosen mode.
+    pipeline = [step for step in pipeline if step not in ("sql", "python")]
+    pipeline.insert(0, execution_mode)
+
+    if intent == "RETRIEVAL":
+        return pipeline[:1]
+    return pipeline
+
+
 def route_after_orchestrator(state: AgentState) -> str:
-    """Route to the first agent in the pipeline."""
     pipeline = state.get("pipeline", [])
     if not pipeline:
         return "final_report"
     first = pipeline[0]
-    return first if first in ("sql", "eda", "insight", "viz") else "final_report"
+    if first == "sql":
+        return "sql"
+    if first == "python":
+        return "python"
+    if first in ("eda", "insight", "viz"):
+        return first
+    return "final_report"

@@ -293,6 +293,7 @@ export default function AgentsPage() {
     truncateRunsAfter,
     setRunsFromReports,
     setActiveRunId,
+    setSessionTables,
   } = useAgentStore()
 
   const approvalRun = runs.find((r: AgentRun) => r.phase === 'awaiting_approval') ?? null
@@ -315,6 +316,12 @@ export default function AgentsPage() {
     }
 
     const storeSnap = useAgentStore.getState()
+
+    const savedTables = storeSnap.sessionTables[sessionFromUrl]
+    if (savedTables?.length) {
+      setSelectedTables(savedTables)
+    }
+
     const runsMatchSession =
       storeSnap.runs.length > 0 &&
       storeSnap.sessionId === sessionFromUrl &&
@@ -450,7 +457,11 @@ export default function AgentsPage() {
 
   useEffect(() => {
     if (tables?.length && selectedTables.length === 0) {
-      setSelectedTables(tables.map((t) => t.name))
+      const storeSnap = useAgentStore.getState()
+      const saved = sessionFromUrl
+        ? storeSnap.sessionTables[sessionFromUrl]
+        : undefined
+      setSelectedTables(saved?.length ? saved : tables.map((t) => t.name))
     }
   }, [tables])
 
@@ -554,6 +565,7 @@ export default function AgentsPage() {
           return
         }
 
+        setSessionTables(currentSessionId, selectedTables)
         addRun(run_id, currentSessionId, trimmed)
 
         if (!opts?.replaceHistorySessionId) {
@@ -614,6 +626,7 @@ export default function AgentsPage() {
       replaceAgentHistorySession,
       setItemLoading,
       setSessionId,
+      setSessionTables,
       scrollToLatest,
     ]
   )

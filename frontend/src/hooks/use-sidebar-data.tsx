@@ -1,6 +1,7 @@
 import { useMemo, useCallback } from 'react'
 import { IconDatabase, IconPlus, IconClock, IconBrain } from '@tabler/icons-react'
 import { useTableList } from '@/hooks/use-table-list'
+import { DATASOURCE_TYPE_LABELS } from '@/api/datasources'
 import { type SidebarData } from '@/components/layout/types'
 import {
   useSharedAnalysisHistory,
@@ -73,6 +74,7 @@ export const useSidebarData = (): {
           ...tables.map((table) => ({
             title: table.name,
             url: `/table/${table.name}` as any,
+            badge: DATASOURCE_TYPE_LABELS[table.datasourceType] ?? table.datasourceType,
           })),
           ],
         },
