@@ -17,6 +17,7 @@ class AgentState(TypedDict):
     schema_info: str
 
     # Orchestrator decision
+    intent: str  # "RETRIEVAL" or "ANALYTICAL"
     pipeline: List[str]  # e.g. ["sql", "eda", "insight", "viz"]
     current_agent: str
     agent_steps: List[str]  # history of completed agent names

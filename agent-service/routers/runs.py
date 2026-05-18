@@ -59,14 +59,18 @@ async def _run_graph(run: RunState, initial_input: dict):
                     if node_output.get("insights"):
                         run.insights = node_output["insights"]
 
-                await _emit(
-                    "agent_update",
-                    {
-                        "agent": node_name,
-                        "current_agent": run.current_agent,
-                        "agent_steps": run.agent_steps,
-                    },
-                )
+                event_data = {
+                    "agent": node_name,
+                    "current_agent": run.current_agent,
+                    "agent_steps": run.agent_steps,
+                }
+                # Include intent classification when orchestrator reports it
+                if node_name == "orchestrator" and isinstance(node_output, dict):
+                    intent = node_output.get("intent", "")
+                    if intent:
+                        event_data["intent"] = intent
+
+                await _emit("agent_update", event_data)
 
         # ── Check if graph is interrupted (HITL checkpoint) ──
         graph_state = compiled_graph.get_state(config)
@@ -172,6 +176,7 @@ async def start_run(session_id: str, body: StartRunRequest):
         "base_url": body.base_url,
         "api_key": body.api_key,
         "schema_info": "",
+        "intent": "",
         "pipeline": [],
         "current_agent": "",
         "agent_steps": [],
