@@ -72,6 +72,12 @@ export interface SqlGeneratedEvent {
   query: string
 }
 
+/** Incremental answer chunk emitted while the final report is being generated. */
+export interface AnswerChunkEvent {
+  /** Markdown text fragment to append to the streaming answer. */
+  content: string
+}
+
 export interface DoneEvent {
   content: ReportBlock[]
   insights?: string
@@ -148,6 +154,7 @@ export interface SSEHandlers {
   onThinking?: (data: ThinkingEvent) => void
   onAgentUpdate?: (data: AgentUpdateEvent) => void
   onSqlGenerated?: (data: SqlGeneratedEvent) => void
+  onAnswerChunk?: (data: AnswerChunkEvent) => void
   onDone?: (data: DoneEvent) => void
   onError?: (data: ErrorEvent) => void
   onClose?: () => void
@@ -175,6 +182,10 @@ export function streamRun(runId: string, handlers: SSEHandlers): EventSource {
 
   es.addEventListener('sql_generated', (e: MessageEvent) => {
     handlers.onSqlGenerated?.(parse(e.data))
+  })
+
+  es.addEventListener('answer_chunk', (e: MessageEvent) => {
+    handlers.onAnswerChunk?.(parse(e.data))
   })
 
   es.addEventListener('done', (e: MessageEvent) => {

@@ -1,4 +1,4 @@
-import { CheckCircle2, Circle, Loader2, AlertCircle } from 'lucide-react'
+import { CheckCircle2, Circle, Loader2, AlertCircle, CircleSlash } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import type { RunPhase } from '@/stores/agentStore'
@@ -21,6 +21,7 @@ const PHASE_LABELS: Record<RunPhase, string> = {
   awaiting_approval: 'Awaiting SQL Approval',
   done: 'Complete',
   error: 'Error',
+  stopped: 'Stopped',
 }
 
 interface AgentProgressPanelProps {
@@ -51,7 +52,7 @@ export function AgentProgressPanel({
       <div className='flex items-center gap-2'>
         <PhaseIcon phase={phase} />
         <span className='font-medium'>{PHASE_LABELS[phase]}</span>
-        {currentAgent && phase !== 'done' && phase !== 'error' && (
+        {currentAgent && phase !== 'done' && phase !== 'error' && phase !== 'stopped' && (
           <Badge variant='secondary' className='text-xs'>
             {AGENT_LABELS[currentAgent] ?? currentAgent}
           </Badge>
@@ -71,7 +72,7 @@ export function AgentProgressPanel({
         <ol className='space-y-1 pl-2'>
           {agentSteps.map((step, i) => {
             const isActive = step === currentAgent && phase === 'running'
-            const isDone = i < agentSteps.length - 1 || phase === 'done'
+            const isDone = i < agentSteps.length - 1 || phase === 'done' || phase === 'stopped'
             return (
               <li key={i} className='flex items-center gap-2'>
                 {isActive ? (
@@ -106,6 +107,8 @@ function PhaseIcon({ phase }: { phase: RunPhase }) {
       return <CheckCircle2 className='h-4 w-4 text-green-500 shrink-0' />
     case 'error':
       return <AlertCircle className='h-4 w-4 text-destructive shrink-0' />
+    case 'stopped':
+      return <CircleSlash className='h-4 w-4 text-muted-foreground shrink-0' />
     case 'awaiting_approval':
       return <AlertCircle className='h-4 w-4 text-amber-500 shrink-0' />
     default:

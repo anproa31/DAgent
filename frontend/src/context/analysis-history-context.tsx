@@ -14,6 +14,12 @@ export interface AnalysisHistoryItem {
 interface AnalysisHistoryContextType {
   history: AnalysisHistoryItem[]
   addToHistory: (id: string, query: string, kind?: AnalysisHistoryKind) => void
+  /** Same sidebar row: swap agent session id (e.g. after edit → fork new backend session). */
+  replaceAgentHistorySession: (
+    previousSessionId: string,
+    nextSessionId: string,
+    query: string
+  ) => void
   removeFromHistory: (id: string) => void
   clearHistory: () => void
   setItemLoading: (id: string, isLoading: boolean) => void
@@ -102,6 +108,48 @@ const useAnalysisHistory = () => {
 
   }, [saveToStorage])
 
+  const replaceAgentHistorySession = useCallback(
+    (previousSessionId: string, nextSessionId: string, query: string) => {
+      if (!previousSessionId?.trim() || !nextSessionId?.trim()) return
+      setHistory((prevHistory) => {
+        const withoutDupNext = prevHistory.filter(
+          (item) => !(item.kind === 'agent' && item.id === nextSessionId)
+        )
+        let replaced = false
+        const mapped = withoutDupNext.map((item) => {
+          if (item.kind === 'agent' && item.id === previousSessionId) {
+            replaced = true
+            return {
+              ...item,
+              id: nextSessionId,
+              query,
+              timestamp: Date.now(),
+              isLoading: true,
+            }
+          }
+          return item
+        })
+        const newHistory = (
+          replaced
+            ? mapped
+            : [
+                {
+                  id: nextSessionId,
+                  query,
+                  timestamp: Date.now(),
+                  isLoading: true,
+                  kind: 'agent' as AnalysisHistoryKind,
+                },
+                ...mapped,
+              ]
+        ).slice(0, MAX_HISTORY_ITEMS)
+        saveToStorage(newHistory)
+        return newHistory
+      })
+    },
+    [saveToStorage]
+  )
+
   // Remove a specific item from history
   const removeFromHistory = useCallback(
     (id: string) => {
@@ -141,6 +189,7 @@ const useAnalysisHistory = () => {
     history,
     setItemLoading,
     addToHistory,
+    replaceAgentHistorySession,
     removeFromHistory,
     clearHistory,
   }
