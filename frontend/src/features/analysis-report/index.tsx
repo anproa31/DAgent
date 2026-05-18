@@ -571,11 +571,12 @@ export default function AnalysisReport() {
           <div className="h-full overflow-hidden"> {/* Removed overflow-auto, managed inside analysisReports */}
             {analysisReports}
           </div>
-          <div className="h-full border-l overflow-auto">
+          <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-l bg-background">
             <AnimatePresence>
               {sidePanelContent && (
                 <motion.div
                   key={sidePanelContent.type + sidePanelContent.content}
+                  className="flex h-full min-h-0 min-w-0 flex-1 flex-col"
                   initial={{ opacity: 0, x: 50 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.1 }}

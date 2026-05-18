@@ -7,7 +7,8 @@ import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { Setting } from '@/components/setting'
-import { AgentProgressPanel } from '@/components/agents/AgentProgressPanel'
+import { WorkflowStepTracker, deriveStepStates } from '@/components/agents/WorkflowStepTracker'
+import { AnalyzeBlock, CodeBlockStream, AnswerBlock } from '@/components/agents/MessageStream'
 import { SQLApprovalModal } from '@/components/agents/SQLApprovalModal'
 import { ReportContent } from '@/features/analysis-report/components/report-content'
 import { SidePanel } from '@/features/analysis-report/components/side-panel'
@@ -25,8 +26,8 @@ import {
   AIInputMultiSelectTable,
 } from '@/components/ui/kibo-ui/ai-input'
 import { toast } from 'sonner'
-import { Badge } from '@/components/ui/badge'
-import { BrainCircuit } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Mic } from 'lucide-react'
 import {
   createSession,
   startRun,
@@ -72,38 +73,71 @@ function AgentRunItem({
   run: AgentRun
   onShowSidePanel: (c: { type: 'code' | 'table' | 'step'; content: string; stepData?: ActionStep }) => void
 }) {
-  const showProgress = run.phase !== 'idle' && run.phase !== 'done'
+  const isActive = run.phase !== 'idle' && run.phase !== 'done' && run.phase !== 'error'
   const showReport = run.phase === 'done' && run.content.length > 0
   const showError = run.phase === 'error'
 
+  const stepStates = deriveStepStates(run.currentAgent, run.agentSteps, run.phase)
+
+  const analyzeStatus = isActive && ['orchestrator', 'eda', 'insight'].includes(run.currentAgent)
+    ? 'generating' as const
+    : run.thinkingMessage || run.phase === 'done' ? 'done' as const : 'idle' as const
+
+  const codeStatus = isActive && ['sql', 'code_executor'].includes(run.currentAgent)
+    ? 'generating' as const
+    : run.phase === 'done' ? 'done' as const : 'idle' as const
+
+  const answerStatus = showReport
+    ? 'done' as const
+    : isActive && ['final_report', 'viz'].includes(run.currentAgent)
+      ? 'generating' as const
+      : 'idle' as const
+
   return (
-    <div className='max-w-3xl mx-auto p-4'>
-      <p className='text-xs text-muted-foreground font-medium uppercase tracking-wide mb-2'>
-        {run.query}
-      </p>
-
-      {showProgress && (
-        <AgentProgressPanel
-          phase={run.phase}
-          currentAgent={run.currentAgent}
-          agentSteps={run.agentSteps}
-          thinkingMessage={run.thinkingMessage}
-        />
-      )}
-
-      {showReport && (
-        <ReportContent
-          content={run.content as ReportContentType[]}
-          onShowSidePanel={onShowSidePanel}
-          handleRedoClick={() => {}}
-        />
-      )}
-
-      {showError && (
-        <div className='rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive'>
-          {run.error}
+    <div className='max-w-3xl mx-auto px-4 pt-2'>
+      {/* User query bubble */}
+      <div className='flex justify-end mb-4'>
+        <div className='bg-primary text-primary-foreground rounded-2xl rounded-br-md px-4 py-2.5 max-w-[80%]'>
+          <p className='text-sm'>{run.query}</p>
         </div>
+      </div>
+
+      {/* Workflow step tracker per run */}
+      {isActive && (
+        <WorkflowStepTracker stepStates={stepStates} className='mb-4' />
       )}
+
+      {/* Accordion-style streaming blocks */}
+      <div className='space-y-3'>
+        <AnalyzeBlock
+          content={run.thinkingMessage || ''}
+          status={analyzeStatus}
+        />
+
+        {run.pendingSql && (
+          <CodeBlockStream
+            code={run.pendingSql}
+            language='sql'
+            status={codeStatus}
+          />
+        )}
+
+        {showReport && (
+          <AnswerBlock status={answerStatus}>
+            <ReportContent
+              content={run.content as ReportContentType[]}
+              onShowSidePanel={onShowSidePanel}
+              handleRedoClick={() => {}}
+            />
+          </AnswerBlock>
+        )}
+
+        {showError && (
+          <div className='rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive'>
+            {run.error}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -158,7 +192,6 @@ export default function AgentsPage() {
     }, 300)
   }, [])
 
-  // Load session from URL (deep-link / sidebar click)
   useEffect(() => {
     if (!sessionFromUrl) {
       esRef.current?.close()
@@ -187,7 +220,6 @@ export default function AgentsPage() {
           return
         }
 
-        // Load all run reports
         const reportPromises = sessionData.runs.map((r) =>
           getRunReport(r.run_id).then((report) => mapReportToAgentRun(r.run_id, sessionFromUrl, report))
         )
@@ -196,7 +228,6 @@ export default function AgentsPage() {
 
         setRunsFromReports(loadedRuns)
 
-        // If the last run is still in-progress, stream it
         const lastRun = loadedRuns[loadedRuns.length - 1]
         if (lastRun && lastRun.phase !== 'done' && lastRun.phase !== 'error') {
           setActiveRunId(lastRun.runId)
@@ -239,19 +270,23 @@ export default function AgentsPage() {
     }
   }, [sessionFromUrl])
 
-  // Default model
   useEffect(() => {
     if (modelData?.models?.length && !model) {
       setModel(modelData.models[0].id)
     }
   }, [modelData, model])
 
-  // Default tables
   useEffect(() => {
     if (tables?.length && selectedTables.length === 0) {
       setSelectedTables(tables.map((t) => t.name))
     }
   }, [tables])
+
+  const handleStop = useCallback(() => {
+    esRef.current?.close()
+    esRef.current = null
+    setSubmitStatus('ready')
+  }, [])
 
   const handleSubmit: FormEventHandler<HTMLFormElement> = useCallback(
     async (e) => {
@@ -262,12 +297,10 @@ export default function AgentsPage() {
         return
       }
 
-      // Close any open SSE stream
       esRef.current?.close()
       setSubmitStatus('submitted')
 
       try {
-        // If no session yet, create one
         let currentSessionId = sessionId
         if (!currentSessionId) {
           const sessionRes = await createSession()
@@ -292,10 +325,8 @@ export default function AgentsPage() {
         addRun(run_id, currentSessionId, query.trim())
         setQuery('')
 
-        // Add/update sidebar history using session ID (not run ID)
         addToHistory(currentSessionId, query.trim(), 'agent')
 
-        // Navigate with session param if not already there
         if (!sessionFromUrl || sessionFromUrl !== currentSessionId) {
           navigate({ to: '/agents', search: { session: currentSessionId } })
         }
@@ -303,7 +334,6 @@ export default function AgentsPage() {
         setSubmitStatus('streaming')
         scrollToLatest()
 
-        // Open SSE stream
         const es = streamRun(run_id, {
           onThinking: (d) => setThinking(run_id, d.message, d.agent),
           onAgentUpdate: (d) => handleAgentUpdate(run_id, d),
@@ -381,13 +411,64 @@ export default function AgentsPage() {
 
   const isRunning = submitStatus !== 'ready'
 
+  const inputBlock = (
+    <AIInput onSubmit={handleSubmit} className='shadow-lg dark:shadow-accent-foreground/10 border border-border'>
+      <AIInputTextarea
+        onChange={(e) => setQuery(e.target.value)}
+        value={query}
+        placeholder='Describe your analysis task, or pick a preset from the left panel...'
+        disabled={isRunning}
+      />
+      <AIInputToolbar>
+        <AIInputTools>
+          <AIInputModelSelect onValueChange={setModel} value={model}>
+            <AIInputModelSelectTrigger>
+              <AIInputModelSelectValue placeholder='Select a model'>
+                {model && modelData?.models?.find((m: ModelInfo) => m.id === model)?.name}
+              </AIInputModelSelectValue>
+            </AIInputModelSelectTrigger>
+            <AIInputModelSelectContent className='z-50'>
+              {modelData?.models?.map((m: ModelInfo) => (
+                <AIInputModelSelectItem key={m.id} value={m.id}>
+                  {m.name}
+                </AIInputModelSelectItem>
+              ))}
+            </AIInputModelSelectContent>
+          </AIInputModelSelect>
+          <AIInputMultiSelectTable
+            options={(tables ?? []).map((t) => ({ value: t.name, label: t.name }))}
+            selected={selectedTables}
+            onSelectedChange={setSelectedTables}
+            placeholder='Select tables'
+          />
+          <Button
+            type='button'
+            variant='ghost'
+            size='icon'
+            className='text-muted-foreground hover:text-foreground h-8 w-8'
+            title='Voice input'
+          >
+            <Mic className='h-4 w-4' />
+          </Button>
+        </AIInputTools>
+        <AIInputSubmit
+          disabled={!isRunning && (!query.trim() || !model || !tables?.length)}
+          status={isRunning ? 'streaming' : 'ready'}
+          onStop={handleStop}
+        />
+      </AIInputToolbar>
+    </AIInput>
+  )
+
   return (
     <>
+      {/* Header: "Assistant" title per spec */}
       <Header fixed>
-        <div className='flex items-center gap-2 ml-2'>
-          <BrainCircuit className='h-5 w-5 text-primary' />
-          <span className='font-semibold text-sm'>Multi-Agent Analytics</span>
-          <Badge variant='secondary' className='text-xs'>Beta</Badge>
+        <div className='flex flex-col justify-center ml-2'>
+          <span className='font-semibold text-sm leading-tight'>Assistant</span>
+          <span className='text-[11px] text-muted-foreground leading-tight'>
+            The center stages focused on chat, streaming analysis, and quick actions.
+          </span>
         </div>
         <div className='ml-auto flex items-center space-x-4'>
           <ThemeSwitch />
@@ -397,61 +478,24 @@ export default function AgentsPage() {
 
       <Main className={`relative ${runs.length > 0 ? 'p-0 h-[calc(100vh-60px)]' : ''}`}>
         {runs.length === 0 ? (
-          /* Empty state — centered input like new-analysis page */
           <div className='mx-auto max-w-4xl flex flex-col items-center pt-[calc(50vh-200px)] px-4'>
             <div className='mb-6 text-center'>
-              <h1 className='text-4xl font-bold tracking-tight'>Multi-Agent Analytics</h1>
+              <h1 className='text-4xl font-bold tracking-tight'>Assistant</h1>
               <p className='text-muted-foreground text-lg mt-2'>
                 Ask a business question and let multiple AI agents collaborate to analyze your data.
               </p>
             </div>
             <div className='w-full max-w-3xl'>
-              <AIInput onSubmit={handleSubmit}>
-                <AIInputTextarea
-                  onChange={(e) => setQuery(e.target.value)}
-                  value={query}
-                  placeholder='Ask a business question… e.g. "Which products had the highest revenue growth last month?"'
-                  disabled={isRunning}
-                />
-                <AIInputToolbar>
-                  <AIInputTools>
-                    <AIInputModelSelect onValueChange={setModel} value={model}>
-                      <AIInputModelSelectTrigger>
-                        <AIInputModelSelectValue placeholder='Select a model'>
-                          {model && modelData?.models?.find((m: ModelInfo) => m.id === model)?.name}
-                        </AIInputModelSelectValue>
-                      </AIInputModelSelectTrigger>
-                      <AIInputModelSelectContent className='z-50'>
-                        {modelData?.models?.map((m: ModelInfo) => (
-                          <AIInputModelSelectItem key={m.id} value={m.id}>
-                            {m.name}
-                          </AIInputModelSelectItem>
-                        ))}
-                      </AIInputModelSelectContent>
-                    </AIInputModelSelect>
-                    <AIInputMultiSelectTable
-                      options={(tables ?? []).map((t) => ({ value: t.name, label: t.name }))}
-                      selected={selectedTables}
-                      onSelectedChange={setSelectedTables}
-                      placeholder='Select tables'
-                    />
-                  </AIInputTools>
-                  <AIInputSubmit
-                    disabled={!query.trim() || !model || !tables?.length || isRunning}
-                    status={isRunning ? 'streaming' : 'ready'}
-                  />
-                </AIInputToolbar>
-              </AIInput>
+              {inputBlock}
             </div>
           </div>
         ) : (
-          /* Conversation view — all runs stacked with follow-up input at bottom */
           <div className='relative h-full'>
             <div
               ref={scrollContainerRef}
               className='h-full overflow-auto pb-24'
             >
-              <div className='space-y-8 mb-[100px]'>
+              <div className='space-y-6 mb-[100px] pt-4'>
                 {runs.map((run, index) => {
                   const isLast = index === runs.length - 1
                   return (
@@ -466,52 +510,16 @@ export default function AgentsPage() {
               </div>
             </div>
 
-            {/* Follow-up input — always at bottom */}
+            {/* Fixed bottom input */}
             <div className='sticky bottom-5 w-full flex justify-center px-4'>
               <div className='w-full max-w-3xl'>
-                <AIInput onSubmit={handleSubmit} className='shadow-lg dark:shadow-accent-foreground/10 border border-border'>
-                  <AIInputTextarea
-                    onChange={(e) => setQuery(e.target.value)}
-                    value={query}
-                    placeholder='Ask a follow-up question…'
-                    disabled={isRunning}
-                  />
-                  <AIInputToolbar>
-                    <AIInputTools>
-                      <AIInputModelSelect onValueChange={setModel} value={model}>
-                        <AIInputModelSelectTrigger>
-                          <AIInputModelSelectValue placeholder='Select a model'>
-                            {model && modelData?.models?.find((m: ModelInfo) => m.id === model)?.name}
-                          </AIInputModelSelectValue>
-                        </AIInputModelSelectTrigger>
-                        <AIInputModelSelectContent className='z-50'>
-                          {modelData?.models?.map((m: ModelInfo) => (
-                            <AIInputModelSelectItem key={m.id} value={m.id}>
-                              {m.name}
-                            </AIInputModelSelectItem>
-                          ))}
-                        </AIInputModelSelectContent>
-                      </AIInputModelSelect>
-                      <AIInputMultiSelectTable
-                        options={(tables ?? []).map((t) => ({ value: t.name, label: t.name }))}
-                        selected={selectedTables}
-                        onSelectedChange={setSelectedTables}
-                        placeholder='Select tables'
-                      />
-                    </AIInputTools>
-                    <AIInputSubmit
-                      disabled={!query.trim() || !model || !tables?.length || isRunning}
-                      status={isRunning ? 'streaming' : 'ready'}
-                    />
-                  </AIInputToolbar>
-                </AIInput>
+                {inputBlock}
               </div>
             </div>
           </div>
         )}
       </Main>
 
-      {/* HITL SQL Approval modal */}
       <SQLApprovalModal
         open={!!approvalRun}
         sql={approvalRun?.pendingSql ?? ''}
@@ -520,9 +528,8 @@ export default function AgentsPage() {
         onReject={handleRejectSQL}
       />
 
-      {/* Side panel for code/table detail */}
       {sidePanelContent && (
-        <div className='fixed inset-y-0 right-0 w-[480px] z-40 shadow-xl'>
+        <div className='fixed top-16 bottom-0 right-0 z-40 flex w-[480px] min-w-0 flex-col overflow-hidden border-l bg-background shadow-xl'>
           <SidePanel
             type={sidePanelContent.type}
             content={sidePanelContent.content}
