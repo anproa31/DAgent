@@ -73,6 +73,8 @@ class IntrospectionOutcome:
     schema_markdown: str
     sql_snippets: List[str]
     """SQL statements the sandbox can replay to recreate the views/attachments."""
+    context_markdown: str = ""
+    """Semantic context summary from the context-engine: table grains, column roles, relationships, query capabilities."""
 
 
 def normalize_identifier(name: str, max_length: int = 63) -> str:

@@ -66,6 +66,8 @@ class DatasourceRecord(BaseModel):
     tables: List[DatasourceTableInfo] = Field(default_factory=list)
     schema_markdown: str = ""
     """Pre-rendered markdown schema description, suitable for LLM prompts."""
+    context_summary: str = ""
+    """Semantic context summary from the context-engine: table grains, column roles, relationships, query capabilities."""
     created_at: datetime = Field(default_factory=datetime.utcnow)
     error: Optional[str] = None
 

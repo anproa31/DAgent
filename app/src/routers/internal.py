@@ -39,7 +39,18 @@ async def get_schema(tables: Optional[str] = Query(None)) -> Dict[str, Any]:
 
     combined = registry.aggregate_schema_markdown(view_names=requested_views)
 
-    return {"schema": schema_by_view, "combined": combined}
+    # Collect context summaries from included datasources
+    context_parts: List[str] = []
+    for record in registry.list_datasources():
+        if record.context_summary:
+            if requested_views is None or any(v in requested_views for v in record.view_names):
+                context_parts.append(record.context_summary)
+
+    return {
+        "schema": schema_by_view,
+        "combined": combined,
+        "context": "\n\n".join(context_parts) if context_parts else "",
+    }
 
 
 @router.get("/datasources")

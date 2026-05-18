@@ -85,6 +85,7 @@ DATASOURCE_ROOT = os.environ.get("DATASOURCE_ROOT", "/data/datasources")
 REGISTRY_PATH = os.path.join(DATASOURCE_ROOT, "registry.json")
 FILES_DIR = os.path.join(DATASOURCE_ROOT, "files")
 CODE_RUNNER_URL = os.environ.get("CODE_RUNNER_URL", "http://sandbox:8001/")
+CONTEXT_ENGINE_URL = os.environ.get("CONTEXT_ENGINE_URL", "http://context-engine:8002/")
 
 
 # ---------------------------------------------------------------------------
@@ -111,6 +112,53 @@ def detect_file_type(filename: str) -> DatasourceFileType:
             detail=f"Unsupported file extension '{suffix}'. Supported: {sorted(_EXTENSION_MAP)}",
         )
     return _EXTENSION_MAP[suffix]
+
+
+# ---------------------------------------------------------------------------
+# Context engine integration
+# ---------------------------------------------------------------------------
+
+
+async def _fetch_context(datasource_name: str, outcome: IntrospectionOutcome) -> None:
+    """Call the context-engine microservice to populate outcome.context_markdown.
+
+    Failures are logged but non-fatal — the outcome is still usable without context.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                CONTEXT_ENGINE_URL.rstrip("/") + "/build",
+                json={
+                    "datasource_name": datasource_name,
+                    "tables": [
+                        {
+                            "name": tbl.name,
+                            "columns": [
+                                {"name": c, "type": t, "nullable": n}
+                                for c, t, n in tbl.columns
+                            ],
+                            "row_count": tbl.row_count,
+                            "samples": tbl.samples,
+                            "column_stats": {
+                                cn: {
+                                    "distinct_count": cs.distinct_count,
+                                    "null_count": cs.null_count,
+                                    "min_value": cs.min_value,
+                                    "max_value": cs.max_value,
+                                    "top_values": cs.top_values,
+                                }
+                                for cn, cs in tbl.column_stats.items()
+                            },
+                        }
+                        for tbl in outcome.tables
+                    ],
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+            outcome.context_markdown = data.get("context_summary", "")
+    except Exception as exc:
+        logger.warning("Context-engine unavailable, skipping context build: %s", exc)
 
 
 # ---------------------------------------------------------------------------
@@ -222,6 +270,9 @@ class DatasourceRegistry:
             shutil.rmtree(ds_dir, ignore_errors=True)
             raise HTTPException(status_code=400, detail=f"Introspection failed: {exc}") from exc
 
+        # Build semantic context via the context-engine microservice
+        await _fetch_context(Path(upload.filename).stem, outcome)
+
         record = self._build_record(
             datasource_id=datasource_id,
             name=Path(upload.filename).stem,
@@ -282,6 +333,9 @@ class DatasourceRegistry:
             )
         except Exception as exc:
             raise HTTPException(status_code=400, detail=f"Connection or introspection failed: {exc}") from exc
+
+        # Build semantic context via the context-engine microservice
+        await _fetch_context(name, outcome)
 
         record = self._build_record(
             datasource_id=str(uuid.uuid4()),
@@ -407,6 +461,7 @@ class DatasourceRegistry:
             view_names=outcome.view_names,
             tables=tables,
             schema_markdown=outcome.schema_markdown,
+            context_summary=outcome.context_markdown,
             created_at=datetime.utcnow(),
         )
 
@@ -534,6 +589,8 @@ class DatasourceRegistry:
         parts: List[str] = []
         for record in records:
             if view_names is None:
+                if record.context_summary:
+                    parts.append(record.context_summary)
                 parts.append(f"# Datasource: {record.name} ({record.type})")
                 if record.schema_markdown:
                     parts.append(record.schema_markdown)
@@ -543,6 +600,8 @@ class DatasourceRegistry:
             relevant = [v for v in record.view_names if v in view_names]
             if not relevant:
                 continue
+            if record.context_summary:
+                parts.append(record.context_summary)
             parts.append(f"# Datasource: {record.name} ({record.type})")
             # We currently store one combined markdown per datasource. Filtering
             # by table within a datasource is best-effort: include the whole
