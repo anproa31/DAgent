@@ -41,13 +41,23 @@ async def viz_agent_node(state: AgentState) -> dict:
             "agent_steps": state.get("agent_steps", []) + ["viz"],
         }
 
-    # Extract code from <python>...</python> tags
+    # Extract code from <python>...</python> tags or markdown code blocks
     code_match = re.search(r"<python>(.*?)</python>", raw, re.DOTALL)
-    viz_code = code_match.group(1).strip() if code_match else raw.strip()
+    if code_match:
+        viz_code = code_match.group(1).strip()
+    else:
+        # Fallback: strip markdown code blocks
+        viz_code = re.sub(r"^```python\s*|\s*```$", "", raw.strip(), flags=re.MULTILINE)
+        viz_code = viz_code.strip()
 
     # Find figure variable names (fig1, fig2, fig, figure, etc.)
-    var_names = re.findall(r"\b(fig\w*|figure\w*)\s*=", viz_code)
+    # Handles both "fig = ..." and "fig, ax = ..." (tuple unpacking)
+    # Exclude figsize (it's a keyword argument, not a figure variable)
+    var_names = re.findall(r"\b(?!figsize\b)(fig\w*|figure\w*)\s*(?:,|\s*=)", viz_code)
     var_names = list(dict.fromkeys(var_names))  # deduplicate while preserving order
+
+    # Debug: log generated code
+    print(f"[viz_agent] generated code:\n{viz_code}")
 
     # Execute visualization code in sandbox
     session_id = state.get("session_id", state.get("run_id", "default"))

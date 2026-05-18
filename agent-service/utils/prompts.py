@@ -192,6 +192,9 @@ Insights: {insights}
 
 Write Python code that:
 - Creates 1-2 focused matplotlib figures that best illustrate the insights
+- Uses ``figsize=(8, 5)`` or smaller for compact charts
+- Uses ``constrained_layout=True`` in ``plt.subplots()`` to minimize whitespace
+- Calls ``plt.tight_layout(pad=0.5)`` before ``plt.close()``
 - Uses clear labels, titles, and readable fonts
 - Stores figures in variables (e.g. ``fig1``, ``fig2``)
 - Closes figures after assignment with ``plt.close(fig1)``
