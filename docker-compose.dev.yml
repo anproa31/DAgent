@@ -1,13 +1,13 @@
-name: daa
+name: daa-dev
 
 services:
   sandbox:
     build: ./sandbox
-    container_name: sandbox_service
+    container_name: daa_dev_sandbox
     networks:
       - app_network
     environment:
-      APP_SERVICE_URL: http://app:8000
+      APP_SERVICE_URL: ${APP_SERVICE_URL:-http://app:8000}
       SANDBOX_DUCKDB_PATH: /data/sandbox.duckdb
     volumes:
       - datasource_data:/data
@@ -17,13 +17,13 @@ services:
     build:
       context: ./app
       dockerfile: Dockerfile
-    container_name: app_service
+    container_name: daa_dev_app
     extra_hosts:
       - host.docker.internal:host-gateway
     ports:
-      - "8073:8000"
+      - "8173:8000"
     environment:
-      CODE_RUNNER_URL: http://sandbox:8001/
+      CODE_RUNNER_URL: ${CODE_RUNNER_URL:-http://sandbox:8001/}
       DATASOURCE_ROOT: /data/datasources
     networks:
       - app_network
@@ -38,14 +38,18 @@ services:
     build:
       context: ./agent-service
       dockerfile: Dockerfile
-    container_name: agent_service
+    container_name: daa_dev_agent
     extra_hosts:
       - host.docker.internal:host-gateway
     ports:
-      - "8074:8000"
+      - "8174:8000"
     environment:
-      CODE_RUNNER_URL: http://sandbox:8001/
-      APP_SERVICE_URL: http://app:8000
+      CODE_RUNNER_URL: ${CODE_RUNNER_URL:-http://sandbox:8001/}
+      APP_SERVICE_URL: ${APP_SERVICE_URL:-http://app:8000}
+      # Chat session DB on host (gitignored); run `alembic upgrade head` from ./agent-service
+      DATABASE_URL: sqlite+aiosqlite:////usr/src/app/data/agent.db
+      # Set SQL_ECHO=1 to log SQL while debugging
+      SQL_ECHO: "0"
     networks:
       - app_network
     depends_on:
@@ -53,6 +57,8 @@ services:
       - sandbox
     volumes:
       - ./agent-service:/usr/src/app
+      # Persist SQLite outside the image; visible at ./agent-service/data on the host for testing
+      - ./agent-service/data:/usr/src/app/data
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
   frontend:
@@ -62,14 +68,16 @@ services:
     stdin_open: true
     tty: true
     ports:
-      - 3030:5173
+      - "3130:5173"
     command: /bin/sh -c "npm install && npm run dev"
     volumes:
       - ./frontend:/app
       - node-modules:/app/node_modules/
     environment:
-      - VITE_SERVER_URL=http://localhost:8073
-      - VITE_AGENT_SERVICE_URL=http://localhost:8074
+      - VITE_SERVER_URL=http://localhost:8173
+      - VITE_AGENT_SERVICE_URL=http://localhost:8174
+      # Default LLM base URL when localStorage is empty; host.docker.internal reaches Ollama on the host from the app container when using this stack.
+      - VITE_DEFAULT_OPENAI_BASE_URL=http://host.docker.internal:11434
 
 networks:
   app_network:
@@ -77,4 +85,6 @@ networks:
 
 volumes:
   node-modules:
+    name: node_modules
   datasource_data:
+    name: dev_datasource_data

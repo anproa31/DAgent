@@ -1,9 +1,19 @@
-import os
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import sessions_router, runs_router
 
-app = FastAPI(title="Data Analytics Agent Service", version="1.0.0")
+from database import init_db
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_db()
+    yield
+
+
+app = FastAPI(title="Data Analytics Agent Service", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

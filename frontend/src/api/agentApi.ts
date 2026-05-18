@@ -21,6 +21,22 @@ export interface SessionRunsResponse {
   runs: SessionRunSummary[]
 }
 
+export interface SessionListItem {
+  session_id: string
+  title: string
+  updated_at: string
+}
+
+export interface SessionListResponse {
+  sessions: SessionListItem[]
+}
+
+export interface SessionDetailResponse {
+  session_id: string
+  title: string
+  runs: SessionRunSummary[]
+}
+
 export interface StartRunRequest {
   query: string
   tables?: string[]
@@ -93,6 +109,18 @@ export const createSession = async (): Promise<CreateSessionResponse> => {
   const res = await axios.post<CreateSessionResponse>(
     `${AGENT_BASE_URL}/agent/sessions`,
     {}
+  )
+  return res.data
+}
+
+export const listSessions = async (): Promise<SessionListResponse> => {
+  const res = await axios.get<SessionListResponse>(`${AGENT_BASE_URL}/agent/sessions`)
+  return res.data
+}
+
+export const getSessionDetail = async (sessionId: string): Promise<SessionDetailResponse> => {
+  const res = await axios.get<SessionDetailResponse>(
+    `${AGENT_BASE_URL}/agent/sessions/${sessionId}`
   )
   return res.data
 }

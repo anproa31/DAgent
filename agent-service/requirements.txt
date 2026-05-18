@@ -7,3 +7,6 @@ langgraph==0.3.34
 langchain-core==0.3.59
 langchain-openai==0.3.16
 python-dotenv==1.1.0
+sqlalchemy[asyncio]==2.0.40
+aiosqlite==0.21.0
+alembic==1.15.2

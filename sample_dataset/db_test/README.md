@@ -37,13 +37,13 @@ docker exec demo_postgres psql -U demo -d hr_analytics -c "SELECT COUNT(*) FROM 
 2. Open the UI → **Connect database** → PostgreSQL
 3. Use one of the following:
 
-**App on host (browser → localhost:8073), DB in Docker**
+**App on host (browser → localhost:8173 with dev compose), DB in Docker**
 
 | Field | Value |
 |-------|--------|
 | Connection string | `postgresql://demo:demo@localhost:5433/hr_analytics` |
 
-**App in Docker (`app_service`), DB in Docker**
+**App in Docker (`daa_dev_app`), DB in Docker**
 
 | Field | Value |
 |-------|--------|

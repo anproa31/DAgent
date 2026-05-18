@@ -1,19 +1,20 @@
 import uuid
 import asyncio
 import json
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator, List
+
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from langgraph.types import Command
 
 from agents.graph import compiled_graph
+from database import async_session_maker
 from models.requests import StartRunRequest, ApproveRequest, RejectRequest
 from models.responses import StartRunResponse, ApproveResponse, RejectResponse, RunReportResponse
+from repositories import run_repository, session_repository
+from run_registry import RUN_STATES
 
 router = APIRouter()
-
-# Per-run state: event_queue, approval_event, approval_data, final state, done flag
-_run_states: dict = {}
 
 
 class RunState:
@@ -32,6 +33,45 @@ class RunState:
         self.insights: str = ""
         self.agent_steps: list = []
         self.error: str = ""
+
+
+def _title_hint_from_query(query: str) -> str:
+    q = (query or "").strip().split("\n")[0].strip()
+    return (q[:120] + "…") if len(q) > 120 else q
+
+
+def _normalize_report_content(rc: Any) -> List[Any]:
+    if rc is None:
+        return []
+    return rc if isinstance(rc, list) else []
+
+
+async def _persist_run_to_db(run: RunState) -> None:
+    pending_approval = False
+    try:
+        graph_state = compiled_graph.get_state({"configurable": {"thread_id": run.run_id}})
+        pending_approval = bool(graph_state and graph_state.next) and not run.done
+    except Exception:
+        pending_approval = False
+
+    sql_ok = bool(run.approval_data.get("approved")) if run.approval_data else False
+
+    async with async_session_maker() as db:
+        await run_repository.update_run(
+            db,
+            run.run_id,
+            done=run.done,
+            error=run.error or None,
+            current_agent=run.current_agent or "",
+            sql_draft=run.sql_draft or None,
+            sql_explanation=run.sql_explanation or None,
+            sql_approved=sql_ok,
+            pending_approval=pending_approval,
+            insights=run.insights or None,
+            report_content=_normalize_report_content(run.report_content),
+            agent_steps=list(run.agent_steps) if run.agent_steps else [],
+        )
+        await session_repository.touch_session(db, run.session_id)
 
 
 async def _run_graph(run: RunState, initial_input: dict):
@@ -150,22 +190,34 @@ async def _run_graph(run: RunState, initial_input: dict):
         run.done = True
         await run.event_queue.put({"event": "error", "data": {"message": str(e)}})
         print(f"[runs] graph error for run {run.run_id}: {e}")
+    finally:
+        try:
+            await _persist_run_to_db(run)
+        except Exception as pe:
+            print(f"[runs] persist error for run {run.run_id}: {pe}")
+        RUN_STATES.pop(run.run_id, None)
 
 
 # ── Endpoints ────────────────────────────────────────────────────────────────
 
+
 @router.post("/sessions/{session_id}/runs", response_model=StartRunResponse)
 async def start_run(session_id: str, body: StartRunRequest):
     """Start a new multi-agent analysis run inside a session."""
-    from routers.sessions import sessions
-
     run_id = str(uuid.uuid4())
-    run = RunState(session_id=session_id, run_id=run_id, query=body.query)
-    _run_states[run_id] = run
 
-    # Register run in session
-    if session_id in sessions:
-        sessions[session_id]["runs"].append(run_id)
+    async with async_session_maker() as db:
+        sess = await session_repository.get_session(db, session_id)
+        if not sess:
+            raise HTTPException(status_code=404, detail="Session not found")
+        await run_repository.create_run(db, run_id, session_id, body.query)
+        await session_repository.set_session_title_if_empty(
+            db, session_id, _title_hint_from_query(body.query)
+        )
+        await session_repository.touch_session(db, session_id)
+
+    run = RunState(session_id=session_id, run_id=run_id, query=body.query)
+    RUN_STATES[run_id] = run
 
     initial_input = {
         "session_id": session_id,
@@ -198,7 +250,6 @@ async def start_run(session_id: str, body: StartRunRequest):
         "error": "",
     }
 
-    # Launch graph in background
     asyncio.create_task(_run_graph(run, initial_input))
     return StartRunResponse(run_id=run_id)
 
@@ -206,7 +257,7 @@ async def start_run(session_id: str, body: StartRunRequest):
 @router.get("/runs/{run_id}/stream")
 async def stream_run(run_id: str):
     """Server-Sent Events stream of agent progress for this run."""
-    run = _run_states.get(run_id)
+    run = RUN_STATES.get(run_id)
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
 
@@ -237,7 +288,7 @@ async def stream_run(run_id: str):
 @router.post("/runs/{run_id}/approve", response_model=ApproveResponse)
 async def approve_sql(run_id: str, body: ApproveRequest):
     """Approve the pending SQL (optionally with an edited version)."""
-    run = _run_states.get(run_id)
+    run = RUN_STATES.get(run_id)
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
 
@@ -250,7 +301,7 @@ async def approve_sql(run_id: str, body: ApproveRequest):
 @router.post("/runs/{run_id}/reject", response_model=RejectResponse)
 async def reject_sql(run_id: str, body: RejectRequest):
     """Reject the pending SQL and trigger regeneration."""
-    run = _run_states.get(run_id)
+    run = RUN_STATES.get(run_id)
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
 
@@ -262,23 +313,28 @@ async def reject_sql(run_id: str, body: RejectRequest):
 @router.get("/runs/{run_id}/report", response_model=RunReportResponse)
 async def get_report(run_id: str):
     """Poll for the current state / final report of a run."""
-    run = _run_states.get(run_id)
-    if not run:
-        raise HTTPException(status_code=404, detail="Run not found")
+    run = RUN_STATES.get(run_id)
+    if run:
+        graph_state = compiled_graph.get_state({"configurable": {"thread_id": run_id}})
+        pending_approval = bool(graph_state and graph_state.next)
 
-    graph_state = compiled_graph.get_state({"configurable": {"thread_id": run_id}})
-    pending_approval = bool(graph_state and graph_state.next)
+        return RunReportResponse(
+            done=run.done,
+            error=run.error or None,
+            query=run.query,
+            current_agent=run.current_agent,
+            sql_draft=run.sql_draft or None,
+            sql_explanation=run.sql_explanation or None,
+            sql_approved=bool(run.approval_data.get("approved")),
+            pending_approval=pending_approval,
+            insights=run.insights or None,
+            content=run.report_content,
+            agent_steps=run.agent_steps,
+        )
 
-    return RunReportResponse(
-        done=run.done,
-        error=run.error or None,
-        query=run.query,
-        current_agent=run.current_agent,
-        sql_draft=run.sql_draft or None,
-        sql_explanation=run.sql_explanation or None,
-        sql_approved=bool(run.approval_data.get("approved")),
-        pending_approval=pending_approval,
-        insights=run.insights or None,
-        content=run.report_content,
-        agent_steps=run.agent_steps,
-    )
+    async with async_session_maker() as db:
+        row = await run_repository.get_run(db, run_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Run not found")
+        payload = run_repository.run_row_to_report_payload(row)
+        return RunReportResponse(**payload)
