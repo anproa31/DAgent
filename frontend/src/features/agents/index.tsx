@@ -7,8 +7,8 @@ import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { Setting } from '@/components/setting'
-import { WorkflowStepTracker, deriveStepStates } from '@/components/agents/WorkflowStepTracker'
-import { AnalyzeBlock, CodeBlockStream, AnswerBlock } from '@/components/agents/MessageStream'
+import { WorkflowStepTracker, deriveVisibleSteps } from '@/components/agents/WorkflowStepTracker'
+import { AnalyzeBlock, CodeBlockStream, AnswerBlock, StreamingAnswerBlock } from '@/components/agents/MessageStream'
 import { SQLApprovalModal } from '@/components/agents/SQLApprovalModal'
 import { ReportContent } from '@/features/analysis-report/components/report-content'
 import { SidePanel } from '@/features/analysis-report/components/side-panel'
@@ -27,7 +27,8 @@ import {
 } from '@/components/ui/kibo-ui/ai-input'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { Mic } from 'lucide-react'
+import { Textarea } from '@/components/ui/textarea'
+import { Mic, Pencil, Check, X } from 'lucide-react'
 import {
   createSession,
   startRun,
@@ -60,6 +61,7 @@ function mapReportToAgentRun(runId: string, sessionId: string, report: RunReport
     thinkingMessage: '',
     pendingSql: report.sql_draft ?? '',
     pendingSqlExplanation: report.sql_explanation ?? '',
+    streamingAnswer: '',
     content: report.content ?? [],
     insights: report.insights ?? '',
     error: report.error ?? '',
@@ -68,43 +70,145 @@ function mapReportToAgentRun(runId: string, sessionId: string, report: RunReport
 
 function AgentRunItem({
   run,
+  runIndex,
   onShowSidePanel,
+  onEditPrompt,
+  onBeginEditPrompt,
+  canEdit,
 }: {
   run: AgentRun
+  runIndex: number
   onShowSidePanel: (c: { type: 'code' | 'table' | 'step'; content: string; stepData?: ActionStep }) => void
+  onEditPrompt: (params: { index: number; query: string }) => Promise<void> | void
+  /** Called before opening the edit UI — stops streaming so the chat is idle while editing. */
+  onBeginEditPrompt?: () => void
+  canEdit: boolean
 }) {
-  const isActive = run.phase !== 'idle' && run.phase !== 'done' && run.phase !== 'error'
+  const isActive =
+    run.phase !== 'idle' &&
+    run.phase !== 'done' &&
+    run.phase !== 'error' &&
+    run.phase !== 'stopped'
   const showReport = run.phase === 'done' && run.content.length > 0
   const showError = run.phase === 'error'
 
-  const stepStates = deriveStepStates(run.currentAgent, run.agentSteps, run.phase)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editValue, setEditValue] = useState(run.query)
 
-  const analyzeStatus = isActive && ['orchestrator', 'eda', 'insight'].includes(run.currentAgent)
-    ? 'generating' as const
-    : run.thinkingMessage || run.phase === 'done' ? 'done' as const : 'idle' as const
+  const visibleSteps = deriveVisibleSteps(run.currentAgent, run.agentSteps, run.phase)
 
-  const codeStatus = isActive && ['sql', 'code_executor'].includes(run.currentAgent)
-    ? 'generating' as const
-    : run.phase === 'done' ? 'done' as const : 'idle' as const
+  const analyzeStatus =
+    isActive && ['orchestrator', 'eda', 'insight'].includes(run.currentAgent)
+      ? ('generating' as const)
+      : run.thinkingMessage || run.phase === 'done' || run.phase === 'stopped'
+        ? ('done' as const)
+        : ('idle' as const)
+
+  const codeStatus =
+    isActive && ['sql', 'code_executor'].includes(run.currentAgent)
+      ? ('generating' as const)
+      : run.phase === 'done' || run.phase === 'stopped'
+        ? ('done' as const)
+        : ('idle' as const)
 
   const answerStatus = showReport
     ? 'done' as const
-    : isActive && ['final_report', 'viz'].includes(run.currentAgent)
+    : isActive && (['final_report', 'viz'].includes(run.currentAgent) || run.streamingAnswer.length > 0)
       ? 'generating' as const
       : 'idle' as const
+
+  const startEditing = () => {
+    onBeginEditPrompt?.()
+    setEditValue(run.query)
+    setIsEditing(true)
+  }
+
+  const cancelEditing = () => {
+    setIsEditing(false)
+    setEditValue(run.query)
+  }
+
+  const submitEdit = async () => {
+    const trimmed = editValue.trim()
+    if (!trimmed || trimmed === run.query) {
+      cancelEditing()
+      return
+    }
+    setIsEditing(false)
+    await onEditPrompt({ index: runIndex, query: trimmed })
+  }
+
+  const handleEditKeyDown = async (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      await submitEdit()
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      cancelEditing()
+    }
+  }
 
   return (
     <div className='max-w-3xl mx-auto px-4 pt-2'>
       {/* User query bubble */}
-      <div className='flex justify-end mb-4'>
-        <div className='bg-primary text-primary-foreground rounded-2xl rounded-br-md px-4 py-2.5 max-w-[80%]'>
-          <p className='text-sm'>{run.query}</p>
-        </div>
+      <div className='group flex justify-end mb-4 gap-2'>
+        {canEdit && !isEditing && (
+          <Button
+            variant='ghost'
+            size='icon'
+            onClick={startEditing}
+            className='self-center h-8 w-8 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity'
+            aria-label='Edit prompt'
+            title='Edit prompt'
+          >
+            <Pencil className='h-3.5 w-3.5' />
+          </Button>
+        )}
+
+        {isEditing ? (
+          <div className='w-full max-w-[80%]'>
+            <Textarea
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onKeyDown={handleEditKeyDown}
+              autoFocus
+              rows={Math.min(8, Math.max(2, editValue.split('\n').length))}
+              className='w-full text-sm resize-none rounded-2xl rounded-br-md border-border focus-visible:ring-1 focus-visible:ring-primary/50'
+              aria-label='Edit prompt'
+            />
+            <div className='mt-1.5 flex items-center justify-end gap-2'>
+              <p className='text-[11px] text-muted-foreground mr-auto'>
+                Enter to send · Shift+Enter for new line · Esc to cancel
+              </p>
+              <Button
+                variant='outline'
+                size='sm'
+                className='h-7 gap-1 text-xs'
+                onClick={cancelEditing}
+              >
+                <X className='h-3 w-3' /> Cancel
+              </Button>
+              <Button
+                size='sm'
+                className='h-7 gap-1 text-xs'
+                onClick={submitEdit}
+                disabled={!editValue.trim()}
+              >
+                <Check className='h-3 w-3' /> Save & regenerate
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className='bg-primary text-primary-foreground rounded-2xl rounded-br-md px-4 py-2.5 max-w-[80%]'>
+            <p className='text-sm whitespace-pre-wrap break-words'>{run.query}</p>
+          </div>
+        )}
       </div>
 
-      {/* Workflow step tracker per run */}
-      {isActive && (
-        <WorkflowStepTracker stepStates={stepStates} className='mb-4' />
+      {/* Workflow step tracker per run — reveals each step the orchestrator
+          actually runs, as it runs (no fixed pipeline). */}
+      {isActive && visibleSteps.length > 0 && (
+        <WorkflowStepTracker steps={visibleSteps} className='mb-4' />
       )}
 
       {/* Accordion-style streaming blocks */}
@@ -120,6 +224,11 @@ function AgentRunItem({
             language='sql'
             status={codeStatus}
           />
+        )}
+
+        {/* Live token/chunk streaming of the final answer while running */}
+        {isActive && run.streamingAnswer && (
+          <StreamingAnswerBlock content={run.streamingAnswer} status='generating' />
         )}
 
         {showReport && (
@@ -148,7 +257,7 @@ export default function AgentsPage() {
   const { data: modelData } = useModelListByMode(false)
   const { session: sessionFromUrl } = agentsRouteApi.useSearch()
   const navigate = useNavigate()
-  const { addToHistory, setItemLoading } = useSharedAnalysisHistory()
+  const { addToHistory, setItemLoading, replaceAgentHistorySession } = useSharedAnalysisHistory()
 
   const [query, setQuery] = useState('')
   const [model, setModel] = useState('')
@@ -168,6 +277,8 @@ export default function AgentsPage() {
   const {
     sessionId,
     runs,
+    preferredModel,
+    setPreferredModel,
     setSessionId,
     resetSession,
     addRun,
@@ -175,8 +286,11 @@ export default function AgentsPage() {
     setThinking,
     handleAgentUpdate,
     handleSqlGenerated,
+    handleAnswerChunk,
     handleDone,
     handleError,
+    cancelRun,
+    truncateRunsAfter,
     setRunsFromReports,
     setActiveRunId,
   } = useAgentStore()
@@ -200,7 +314,13 @@ export default function AgentsPage() {
       return
     }
 
-    if (useAgentStore.getState().sessionId === sessionFromUrl && useAgentStore.getState().runs.length > 0) {
+    const storeSnap = useAgentStore.getState()
+    const runsMatchSession =
+      storeSnap.runs.length > 0 &&
+      storeSnap.sessionId === sessionFromUrl &&
+      storeSnap.runs.every((r: AgentRun) => r.sessionId === sessionFromUrl)
+
+    if (runsMatchSession) {
       return
     }
 
@@ -216,26 +336,65 @@ export default function AgentsPage() {
         setSessionId(sessionFromUrl)
 
         if (sessionData.runs.length === 0) {
-          setRunsFromReports([])
+          const prevRuns = useAgentStore.getState().runs
+          const forkMerge =
+            prevRuns.some((r: AgentRun) => r.sessionId !== sessionFromUrl) &&
+            prevRuns.some((r: AgentRun) => r.sessionId === sessionFromUrl)
+          setRunsFromReports(forkMerge ? prevRuns : [])
           return
         }
 
-        const reportPromises = sessionData.runs.map((r) =>
+        // Filter out runs the user previously cancelled — never reattach SSE to them.
+        const { isCancelled } = useAgentStore.getState()
+        const activeSessionRuns = sessionData.runs.filter((r) => !isCancelled(r.run_id))
+
+        if (activeSessionRuns.length === 0) {
+          const prevRuns = useAgentStore.getState().runs
+          const forkMerge =
+            prevRuns.some((r: AgentRun) => r.sessionId !== sessionFromUrl) &&
+            prevRuns.some((r: AgentRun) => r.sessionId === sessionFromUrl)
+          setRunsFromReports(forkMerge ? prevRuns : [])
+          setItemLoading(sessionFromUrl, false)
+          setSubmitStatus('ready')
+          return
+        }
+
+        const reportPromises = activeSessionRuns.map((r) =>
           getRunReport(r.run_id).then((report) => mapReportToAgentRun(r.run_id, sessionFromUrl, report))
         )
         const loadedRuns = await Promise.all(reportPromises)
         if (cancelled) return
 
-        setRunsFromReports(loadedRuns)
+        const prevRuns = useAgentStore.getState().runs
+        const shouldMergeForkPrefix =
+          prevRuns.some((r: AgentRun) => r.sessionId !== sessionFromUrl) &&
+          prevRuns.some((r: AgentRun) => r.sessionId === sessionFromUrl)
+
+        let mergedRuns = loadedRuns
+        if (shouldMergeForkPrefix) {
+          const preserved = prevRuns.filter((r: AgentRun) => r.sessionId !== sessionFromUrl)
+          const seen = new Set(preserved.map((r: AgentRun) => r.runId))
+          mergedRuns = [...preserved]
+          for (const r of loadedRuns) {
+            if (!seen.has(r.runId)) {
+              mergedRuns.push(r)
+              seen.add(r.runId)
+            }
+          }
+        }
+
+        setRunsFromReports(mergedRuns)
 
         const lastRun = loadedRuns[loadedRuns.length - 1]
-        if (lastRun && lastRun.phase !== 'done' && lastRun.phase !== 'error') {
+        const lastIsCancelled = lastRun ? isCancelled(lastRun.runId) : false
+        if (lastRun && !lastIsCancelled && lastRun.phase !== 'done' && lastRun.phase !== 'error' && lastRun.phase !== 'stopped') {
           setActiveRunId(lastRun.runId)
           setSubmitStatus('streaming')
           const es = streamRun(lastRun.runId, {
             onThinking: (d) => setThinking(lastRun.runId, d.message, d.agent),
             onAgentUpdate: (d) => handleAgentUpdate(lastRun.runId, d),
             onSqlGenerated: (d) => handleSqlGenerated(lastRun.runId, d),
+            onAnswerChunk: (d) => handleAnswerChunk(lastRun.runId, d),
             onDone: (d) => {
               handleDone(lastRun.runId, d)
               setItemLoading(sessionFromUrl, false)
@@ -271,10 +430,23 @@ export default function AgentsPage() {
   }, [sessionFromUrl])
 
   useEffect(() => {
-    if (modelData?.models?.length && !model) {
-      setModel(modelData.models[0].id)
-    }
-  }, [modelData, model])
+    if (!modelData?.models?.length) return
+    const available = modelData.models
+    const currentIsValid = model && available.some((m: ModelInfo) => m.id === model)
+    if (currentIsValid) return
+
+    const preferredIsValid =
+      preferredModel && available.some((m: ModelInfo) => m.id === preferredModel)
+    setModel(preferredIsValid ? preferredModel : available[0].id)
+  }, [modelData, model, preferredModel])
+
+  const handleModelChange = useCallback(
+    (next: string) => {
+      setModel(next)
+      setPreferredModel(next)
+    },
+    [setPreferredModel]
+  )
 
   useEffect(() => {
     if (tables?.length && selectedTables.length === 0) {
@@ -282,34 +454,94 @@ export default function AgentsPage() {
     }
   }, [tables])
 
+  /**
+   * Resolve the run id the stop controls should target.
+   * Falls back to the latest still-active run when `activeRunId` was cleared
+   * (e.g. after an SSE close).
+   */
+  const resolveActiveRunId = useCallback((): string | null => {
+    const { activeRunId, runs } = useAgentStore.getState()
+    if (activeRunId) return activeRunId
+    return (
+      [...runs]
+        .reverse()
+        .find((r: AgentRun) =>
+          ['starting', 'thinking', 'running', 'awaiting_approval'].includes(r.phase)
+        )?.runId ?? null
+    )
+  }, [])
+
+  /** Stop button: silently close the stream and drop the in-flight run from the chat. */
   const handleStop = useCallback(() => {
     esRef.current?.close()
     esRef.current = null
     setSubmitStatus('ready')
-  }, [])
 
-  const handleSubmit: FormEventHandler<HTMLFormElement> = useCallback(
-    async (e) => {
-      e.preventDefault()
-      if (!query.trim()) return
+    const targetRunId = resolveActiveRunId()
+    if (targetRunId) cancelRun(targetRunId, { dropRun: true })
+
+    const sid = sessionFromUrl ?? useAgentStore.getState().sessionId
+    if (sid) setItemLoading(sid, false)
+  }, [sessionFromUrl, setItemLoading, cancelRun, resolveActiveRunId])
+
+  /**
+   * Stop-for-edit: close the stream and clear in-flight generation but keep
+   * the run object so the inline edit textarea stays mounted in its bubble.
+   */
+  const handleStopForEdit = useCallback(() => {
+    esRef.current?.close()
+    esRef.current = null
+    setSubmitStatus('ready')
+
+    const targetRunId = resolveActiveRunId()
+    if (targetRunId) cancelRun(targetRunId, { dropRun: false })
+
+    const sid = sessionFromUrl ?? useAgentStore.getState().sessionId
+    if (sid) setItemLoading(sid, false)
+  }, [sessionFromUrl, setItemLoading, cancelRun, resolveActiveRunId])
+
+  // Shared start-run helper used by both the composer submit and the
+  // edit-previous-prompt flow. Truncating older runs is handled by the
+  // caller before invoking this.
+  const runQuery = useCallback(
+    async (
+      rawQuery: string,
+      opts?: { replaceHistorySessionId?: string }
+    ) => {
+      const trimmed = rawQuery.trim()
+      if (!trimmed) return
       if (!tables?.length) {
         toast.error('Connect at least one table first.')
         return
       }
 
       esRef.current?.close()
+      esRef.current = null
       setSubmitStatus('submitted')
 
       try {
-        let currentSessionId = sessionId
-        if (!currentSessionId) {
+        let currentSessionId: string
+
+        if (opts?.replaceHistorySessionId) {
           const sessionRes = await createSession()
           currentSessionId = sessionRes.session_id
           setSessionId(currentSessionId)
+          replaceAgentHistorySession(
+            opts.replaceHistorySessionId,
+            currentSessionId,
+            trimmed
+          )
+        } else {
+          currentSessionId = sessionId ?? ''
+          if (!currentSessionId) {
+            const sessionRes = await createSession()
+            currentSessionId = sessionRes.session_id
+            setSessionId(currentSessionId)
+          }
         }
 
         const { run_id, error: startError } = await startRun(currentSessionId, {
-          query: query.trim(),
+          query: trimmed,
           tables: selectedTables,
           model,
           base_url: baseUrl,
@@ -322,10 +554,11 @@ export default function AgentsPage() {
           return
         }
 
-        addRun(run_id, currentSessionId, query.trim())
-        setQuery('')
+        addRun(run_id, currentSessionId, trimmed)
 
-        addToHistory(currentSessionId, query.trim(), 'agent')
+        if (!opts?.replaceHistorySessionId) {
+          addToHistory(currentSessionId, trimmed, 'agent')
+        }
 
         if (!sessionFromUrl || sessionFromUrl !== currentSessionId) {
           navigate({ to: '/agents', search: { session: currentSessionId } })
@@ -338,6 +571,7 @@ export default function AgentsPage() {
           onThinking: (d) => setThinking(run_id, d.message, d.agent),
           onAgentUpdate: (d) => handleAgentUpdate(run_id, d),
           onSqlGenerated: (d) => handleSqlGenerated(run_id, d),
+          onAnswerChunk: (d) => handleAnswerChunk(run_id, d),
           onDone: (d) => {
             handleDone(run_id, d)
             setItemLoading(currentSessionId!, false)
@@ -361,7 +595,6 @@ export default function AgentsPage() {
       }
     },
     [
-      query,
       tables,
       sessionId,
       selectedTables,
@@ -373,14 +606,46 @@ export default function AgentsPage() {
       setThinking,
       handleAgentUpdate,
       handleSqlGenerated,
+      handleAnswerChunk,
       handleDone,
       handleError,
       navigate,
       addToHistory,
+      replaceAgentHistorySession,
       setItemLoading,
       setSessionId,
       scrollToLatest,
     ]
+  )
+
+  const handleSubmit: FormEventHandler<HTMLFormElement> = useCallback(
+    async (e) => {
+      e.preventDefault()
+      if (!query.trim()) return
+      const text = query.trim()
+      setQuery('')
+      await runQuery(text)
+    },
+    [query, runQuery]
+  )
+
+  const handleEditPrompt = useCallback(
+    async ({ index, query: edited }: { index: number; query: string }) => {
+      const trimmed = edited.trim()
+      if (!trimmed) return
+      esRef.current?.close()
+      esRef.current = null
+      truncateRunsAfter(index)
+
+      const previousSessionId = sessionFromUrl ?? sessionId ?? ''
+      await runQuery(
+        trimmed,
+        previousSessionId
+          ? { replaceHistorySessionId: previousSessionId }
+          : undefined
+      )
+    },
+    [runQuery, truncateRunsAfter, sessionFromUrl, sessionId]
   )
 
   const handleApproveSQL = useCallback(
@@ -421,7 +686,7 @@ export default function AgentsPage() {
       />
       <AIInputToolbar>
         <AIInputTools>
-          <AIInputModelSelect onValueChange={setModel} value={model}>
+          <AIInputModelSelect onValueChange={handleModelChange} value={model}>
             <AIInputModelSelectTrigger>
               <AIInputModelSelectValue placeholder='Select a model'>
                 {model && modelData?.models?.find((m: ModelInfo) => m.id === model)?.name}
@@ -502,7 +767,11 @@ export default function AgentsPage() {
                     <div key={run.runId} ref={isLast ? latestItemRef : undefined}>
                       <AgentRunItem
                         run={run}
+                        runIndex={index}
                         onShowSidePanel={(c) => setSidePanelContent(c)}
+                        onEditPrompt={handleEditPrompt}
+                        onBeginEditPrompt={handleStopForEdit}
+                        canEdit
                       />
                     </div>
                   )

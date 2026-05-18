@@ -110,3 +110,25 @@ export function AnswerBlock({ children, status }: AnswerBlockProps) {
     </StreamBlock>
   )
 }
+
+interface StreamingAnswerBlockProps {
+  content: string
+  status: StreamBlockStatus
+}
+
+/**
+ * Live, token-by-token markdown rendering of the answer while it is still
+ * being produced by the backend. Renders nothing until the first chunk
+ * arrives so it does not flash an empty block.
+ */
+export function StreamingAnswerBlock({ content, status }: StreamingAnswerBlockProps) {
+  if (!content) return null
+
+  return (
+    <StreamBlock label='Answer' icon={FileCheck} status={status} defaultOpen>
+      <div className='text-sm leading-relaxed'>
+        <AIResponse>{content}</AIResponse>
+      </div>
+    </StreamBlock>
+  )
+}
