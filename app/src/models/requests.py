@@ -12,3 +12,7 @@ class StartAnalysisRequest(BaseModel):
     mode: str = "standard"
     model: str = ""
     index: int = -1
+
+class GenerateTitleRequest(BaseModel):
+    query: str
+    model: str = ""

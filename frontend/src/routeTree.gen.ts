@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as AuthenticatedAgentsRouteImport } from './routes/_authenticated/agents'
 import { Route as errors503RouteImport } from './routes/(errors)/503'
 import { Route as errors500RouteImport } from './routes/(errors)/500'
 import { Route as errors404RouteImport } from './routes/(errors)/404'
@@ -26,6 +27,11 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAgentsRoute = AuthenticatedAgentsRouteImport.update({
+  id: '/agents',
+  path: '/agents',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const errors503Route = errors503RouteImport.update({
@@ -72,6 +78,7 @@ export interface FileRoutesByFullPath {
   '/404': typeof errors404Route
   '/500': typeof errors500Route
   '/503': typeof errors503Route
+  '/agents': typeof AuthenticatedAgentsRoute
   '/': typeof AuthenticatedIndexRoute
   '/report/$reportId': typeof AuthenticatedReportReportIdRoute
   '/table/$tableName': typeof AuthenticatedTableTableNameRoute
@@ -82,6 +89,7 @@ export interface FileRoutesByTo {
   '/404': typeof errors404Route
   '/500': typeof errors500Route
   '/503': typeof errors503Route
+  '/agents': typeof AuthenticatedAgentsRoute
   '/': typeof AuthenticatedIndexRoute
   '/report/$reportId': typeof AuthenticatedReportReportIdRoute
   '/table/$tableName': typeof AuthenticatedTableTableNameRoute
@@ -94,6 +102,7 @@ export interface FileRoutesById {
   '/(errors)/404': typeof errors404Route
   '/(errors)/500': typeof errors500Route
   '/(errors)/503': typeof errors503Route
+  '/_authenticated/agents': typeof AuthenticatedAgentsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/report/$reportId': typeof AuthenticatedReportReportIdRoute
   '/_authenticated/table/$tableName': typeof AuthenticatedTableTableNameRoute
@@ -106,6 +115,7 @@ export interface FileRouteTypes {
     | '/404'
     | '/500'
     | '/503'
+    | '/agents'
     | '/'
     | '/report/$reportId'
     | '/table/$tableName'
@@ -116,6 +126,7 @@ export interface FileRouteTypes {
     | '/404'
     | '/500'
     | '/503'
+    | '/agents'
     | '/'
     | '/report/$reportId'
     | '/table/$tableName'
@@ -127,6 +138,7 @@ export interface FileRouteTypes {
     | '/(errors)/404'
     | '/(errors)/500'
     | '/(errors)/503'
+    | '/_authenticated/agents'
     | '/_authenticated/'
     | '/_authenticated/report/$reportId'
     | '/_authenticated/table/$tableName'
@@ -155,6 +167,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/agents': {
+      id: '/_authenticated/agents'
+      path: '/agents'
+      fullPath: '/agents'
+      preLoaderRoute: typeof AuthenticatedAgentsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/(errors)/503': {
@@ -210,12 +229,14 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedAgentsRoute: typeof AuthenticatedAgentsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedReportReportIdRoute: typeof AuthenticatedReportReportIdRoute
   AuthenticatedTableTableNameRoute: typeof AuthenticatedTableTableNameRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedAgentsRoute: AuthenticatedAgentsRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedReportReportIdRoute: AuthenticatedReportReportIdRoute,
   AuthenticatedTableTableNameRoute: AuthenticatedTableTableNameRoute,

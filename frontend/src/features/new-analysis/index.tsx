@@ -18,7 +18,7 @@ import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { ThemeSwitch } from '@/components/theme-switch'
 import { Setting } from '@/components/setting'
-import { useStartAnalysis, useModelListByMode, ModelInfo,useCreateSpace } from '@/hooks/use-analysis'
+import { useStartAnalysis, useModelListByMode, ModelInfo, useCreateSpace, useGenerateTitle } from '@/hooks/use-analysis'
 import { useGlobalFileDrop } from '@/hooks/use-global-file-drop'
 import { useQueryClient } from '@tanstack/react-query'
 import { useSharedAnalysisHistory } from '@/context/analysis-history-context' // TODO: Replace with useContext.
@@ -42,6 +42,7 @@ export default function NewAnalysis() {
   const navigate = useNavigate()
   const startAnalysisMutation = useStartAnalysis()
   const createSpaceMutation = useCreateSpace()
+  const generateTitleMutation = useGenerateTitle()
   const { addToHistory } = useSharedAnalysisHistory()
 
   const [text, setText] = useState<string>('');
@@ -164,8 +165,14 @@ export default function NewAnalysis() {
       });
 
       if (result.id) {
-        // Add to history (managed by space ID)
-        addToHistory(spaceResult.id, text.trim());
+        // Generate an AI title; fall back to truncated query if it fails
+        const aiTitle = await generateTitleMutation.mutateAsync({
+          query: text.trim(),
+          model,
+        });
+
+        // Add to history using the AI-generated title
+        addToHistory(spaceResult.id, aiTitle);
 
         // Navigate to report page (using space ID) on success
         navigate({ to: `/report/${spaceResult.id}` });

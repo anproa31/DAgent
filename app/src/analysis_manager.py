@@ -340,6 +340,10 @@ async def _parse_response_to_content(
                     var_type = var_content.get("type", "string")
                     data = var_content.get("data")
 
+                    # Skip Python None values – they indicate an unassigned variable
+                    if var_type == "string" and data in (None, "None"):
+                        continue
+
                     if var_type == "image":
                         content.append({"type": "image", "base64": data})
                     elif var_type == "table":

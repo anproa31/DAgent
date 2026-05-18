@@ -44,3 +44,6 @@ class LLMMODEL(BaseModel):
 class GetModelListResponse(BaseModel):
     models: List[LLMMODEL]
 
+class GenerateTitleResponse(BaseModel):
+    title: str
+

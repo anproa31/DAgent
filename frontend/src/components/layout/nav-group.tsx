@@ -164,7 +164,11 @@ const SidebarMenuLink = ({
         isActive={checkIsActive(href, item as NavLink)}
         tooltip={item.title}
       >
-        <Link to={(item as NavLink).url} onClick={() => setOpenMobile(false)}>
+        <Link
+          to={(item as NavLink).url}
+          search={(item as NavLink).search}
+          onClick={() => setOpenMobile(false)}
+        >
           {item.icon && <item.icon />}
           <span>{item.title}</span>
           {item.badge && <NavBadge>{item.badge}</NavBadge>}
@@ -225,7 +229,8 @@ const SidebarMenuCollapsible = ({
                         className="flex-1 min-w-0"
                       >
                         <Link
-                          to={(subItem as any).url}
+                          to={(subItem as NavLink).url}
+                          search={(subItem as NavLink).search}
                           onClick={() => setOpenMobile(false)}
                         >
                           {subItem.icon && <subItem.icon />}
@@ -323,8 +328,9 @@ const SidebarMenuCollapsedDropdown = ({
                 ) : (
                   <div className="flex items-center w-full group/dropitem">
                     <Link
-                      to={(sub as any).url}
-                      className={`flex-1 flex items-center gap-2 ${checkIsActive(href, sub as any) ? 'bg-secondary' : ''}`}
+                      to={(sub as NavLink).url}
+                      search={(sub as NavLink).search}
+                      className={`flex-1 flex items-center gap-2 ${checkIsActive(href, sub as NavItem) ? 'bg-secondary' : ''}`}
                     >
                       {sub.icon && <sub.icon />}
                       <span className='max-w-44 text-wrap truncate'>{sub.title}</span>
@@ -370,13 +376,74 @@ const SidebarMenuCollapsedDropdown = ({
   )
 }
 
+function parseHref(href: string): { pathname: string; searchParams: URLSearchParams } {
+  try {
+    if (href.startsWith('http://') || href.startsWith('https://')) {
+      const u = new URL(href)
+      return { pathname: u.pathname, searchParams: u.searchParams }
+    }
+  } catch {
+    /* fall through */
+  }
+  const q = href.indexOf('?')
+  if (q === -1) {
+    return { pathname: href, searchParams: new URLSearchParams() }
+  }
+  return {
+    pathname: href.slice(0, q),
+    searchParams: new URLSearchParams(href.slice(q + 1)),
+  }
+}
+
 function checkIsActive(href: string, item: NavItem, mainNav = false) {
-  return (
-    href === item.url || // /endpint?search=param
-    href.split('?')[0] === item.url || // endpoint
-    !!item?.items?.filter((i) => i.url === href).length || // if child nav is active
-    (mainNav &&
-      href.split('/')[1] !== '' &&
-      href.split('/')[1] === item?.url?.split('/')[1])
-  )
+  const { pathname, searchParams } = parseHref(href)
+
+  const linkLike = item as NavLink & { items?: NavItem['items'] }
+  const explicitSearch =
+    'search' in linkLike ? linkLike.search : undefined
+
+  if (linkLike.url != null && explicitSearch !== undefined) {
+    const path = String(linkLike.url)
+    if (pathname !== path) return false
+    const keys = Object.keys(explicitSearch)
+    if (keys.length === 0) {
+      return [...searchParams.keys()].length === 0
+    }
+    for (const [k, v] of Object.entries(explicitSearch)) {
+      if (v == null) continue
+      if (searchParams.get(k) !== String(v)) return false
+    }
+    return true
+  }
+
+  if (linkLike.url) {
+    const path = String(linkLike.url)
+    if (
+      pathname === path ||
+      href === path ||
+      href.split('?')[0] === path
+    ) {
+      return true
+    }
+  }
+
+  if (item?.items?.length) {
+    return item.items.some(
+      (i) =>
+        typeof i === 'object' &&
+        i !== null &&
+        'url' in i &&
+        (!('action' in i) || (i as { action?: string }).action !== 'openModal') &&
+        checkIsActive(href, i as NavItem)
+    )
+  }
+
+  if (mainNav && linkLike.url) {
+    const path = String(linkLike.url)
+    const hp = pathname.split('/').filter(Boolean)[0]
+    const ip = path.split('/').filter(Boolean)[0]
+    return !!hp && !!ip && hp === ip
+  }
+
+  return false
 }
