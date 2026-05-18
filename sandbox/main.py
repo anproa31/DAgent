@@ -41,7 +41,7 @@ app = FastAPI(title="Data Analytics Sandbox", version="2.0.0")
 # ---------------------------------------------------------------------------
 
 DUCKDB_PATH = os.environ.get("SANDBOX_DUCKDB_PATH", ":memory:")
-DATASOURCE_SYNC_URL = os.environ.get("APP_SERVICE_URL", "http://data-analysis-agent-app:8000").rstrip("/")
+DATASOURCE_SYNC_URL = os.environ.get("APP_SERVICE_URL", "http://app:8000").rstrip("/")
 
 
 def _open_duckdb() -> duckdb.DuckDBPyConnection:

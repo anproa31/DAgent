@@ -26,7 +26,7 @@ from ..utils.prompts import set_db_schema
 router = APIRouter()
 
 
-SANDBOX_URL = os.getenv("CODE_RUNNER_URL", "http://data-analysis-agent-sandbox:8001/").rstrip("/")
+SANDBOX_URL = os.getenv("CODE_RUNNER_URL", "http://sandbox:8001/").rstrip("/")
 PREVIEW_SESSION_ID = "__preview__"
 
 
