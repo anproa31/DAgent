@@ -1,6 +1,6 @@
 from agents.state import AgentState
 from utils.llm_client import get_async_client, chat_complete
-from utils.prompts import EDA_AGENT_SYSTEM
+from utils.prompts import EDA_AGENT_SYSTEM, format_semantic_context_for_prompt
 
 
 async def eda_agent_node(state: AgentState) -> dict:
@@ -9,11 +9,13 @@ async def eda_agent_node(state: AgentState) -> dict:
 
     data_summary = state.get("data_summary", "No data available")
     schema = state.get("schema_info", "")
+    ctx = format_semantic_context_for_prompt(state.get("enhanced_context", ""))
 
     client = get_async_client(state.get("base_url", ""), state.get("api_key", ""))
     model = state.get("model", "")
 
     system_prompt = EDA_AGENT_SYSTEM.format(
+        context=ctx,
         schema=schema,
         data_summary=data_summary,
     )

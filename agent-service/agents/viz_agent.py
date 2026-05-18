@@ -1,7 +1,7 @@
 import re
 from agents.state import AgentState
 from utils.llm_client import get_async_client, chat_complete
-from utils.prompts import VIZ_AGENT_SYSTEM
+from utils.prompts import VIZ_AGENT_SYSTEM, format_semantic_context_for_prompt
 from services.code_runner import execute_code, get_variable_results
 
 
@@ -12,7 +12,10 @@ async def viz_agent_node(state: AgentState) -> dict:
     client = get_async_client(state.get("base_url", ""), state.get("api_key", ""))
     model = state.get("model", "")
 
+    ctx = format_semantic_context_for_prompt(state.get("enhanced_context", ""))
+
     system_prompt = VIZ_AGENT_SYSTEM.format(
+        context=ctx,
         schema=state.get("schema_info", ""),
         query=state.get("query", ""),
         insights=state.get("insights", ""),

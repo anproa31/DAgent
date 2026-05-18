@@ -1,6 +1,14 @@
 name: daa-dev
 
 services:
+  context-engine:
+    build: ./context-engine
+    container_name: daa_dev_context_engine
+    ports:
+      - "8172:8002"
+    networks:
+      - app_network
+
   sandbox:
     build: ./sandbox
     container_name: daa_dev_sandbox
@@ -25,10 +33,12 @@ services:
     environment:
       CODE_RUNNER_URL: ${CODE_RUNNER_URL:-http://sandbox:8001/}
       DATASOURCE_ROOT: /data/datasources
+      CONTEXT_ENGINE_URL: ${CONTEXT_ENGINE_URL:-http://context-engine:8002/}
     networks:
       - app_network
     depends_on:
       - sandbox
+      - context-engine
     volumes:
       - ./app/src:/usr/src/app/src
       - datasource_data:/data
@@ -46,6 +56,7 @@ services:
     environment:
       CODE_RUNNER_URL: ${CODE_RUNNER_URL:-http://sandbox:8001/}
       APP_SERVICE_URL: ${APP_SERVICE_URL:-http://app:8000}
+      CONTEXT_ENGINE_URL: ${CONTEXT_ENGINE_URL:-http://context-engine:8002/}
       # Chat session DB on host (gitignored); run `alembic upgrade head` from ./agent-service
       DATABASE_URL: sqlite+aiosqlite:////usr/src/app/data/agent.db
       # Set SQL_ECHO=1 to log SQL while debugging
@@ -55,6 +66,7 @@ services:
     depends_on:
       - app
       - sandbox
+      - context-engine
     volumes:
       - ./agent-service:/usr/src/app
       # Persist SQLite outside the image; visible at ./agent-service/data on the host for testing

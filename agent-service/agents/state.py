@@ -15,6 +15,7 @@ class AgentState(TypedDict, total=False):
 
     # Schema context
     schema_info: str
+    enhanced_context: str  # query-focused semantic context from context-engine /enhance (or fallback)
     datasources: List[Dict[str, Any]]  # structured list from /internal/datasources
 
     # Orchestrator decision
