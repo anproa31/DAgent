@@ -32,7 +32,11 @@ cd data-analyst-agent
 
 4. Start the application
 ```bash
-docker compose up --build -d
+docker compose -f docker-compose.dev.yml build --no-cache && 
+docker compose -f docker-compose.dev.yml up
+
+docker compose -f docker-compose.yml build --no-cache && 
+docker compose -f docker-compose.yml up
 ```
 This command sets up 3 containers(Application, Python Sandbox, PostgresDB). Wait for starting up all containers, Access "http://localhost:3030".
 You can use any LLM provider’s model by setting the base_url and api_key from the settings icon in the top right (by default, Ollama is used).
