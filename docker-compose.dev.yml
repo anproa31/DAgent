@@ -51,6 +51,29 @@ services:
     volumes:
       - ./app/src:/usr/src/app/src
 
+  data-analysis-agent-agent-service:
+    build:
+      context: ./agent-service
+      dockerfile: Dockerfile
+    container_name: agent_service
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    ports:
+      - "8074:8000"
+    env_file:
+      - .dbsetting
+    environment:
+      CODE_RUNNER_URL: http://data-analysis-agent-sandbox:8001/
+      APP_SERVICE_URL: http://data-analysis-agent-app:8000
+    networks:
+      - app_network
+    depends_on:
+      - data-analysis-agent-app
+      - data-analysis-agent-sandbox
+      - data-analysis-agent-db
+    volumes:
+      - ./agent-service:/usr/src/app
+
   data-analysis-agent-frontend:
     build:
       context: .
@@ -65,6 +88,7 @@ services:
       - node-modules:/app/node_modules/
     environment:
       - VITE_SERVER_URL=http://localhost:8073
+      - VITE_AGENT_SERVICE_URL=http://localhost:8074
 
 networks:
   app_network:

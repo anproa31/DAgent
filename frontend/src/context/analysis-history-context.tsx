@@ -1,11 +1,22 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
 
-interface AnalysisHistoryContextType {  
-  history: AnalysisHistoryItem[]  
-  addToHistory: (id: string, query: string) => void  
-  removeFromHistory: (id: string) => void  
-  clearHistory: () => void  
-  setItemLoading: (id: string, isLoading: boolean) => void  
+export type AnalysisHistoryKind = 'standard' | 'agent'
+
+export interface AnalysisHistoryItem {
+  id: string
+  query: string
+  timestamp: number
+  isLoading: boolean
+  /** standard = space/report flow; agent = multi-agent runs */
+  kind: AnalysisHistoryKind
+}
+
+interface AnalysisHistoryContextType {
+  history: AnalysisHistoryItem[]
+  addToHistory: (id: string, query: string, kind?: AnalysisHistoryKind) => void
+  removeFromHistory: (id: string) => void
+  clearHistory: () => void
+  setItemLoading: (id: string, isLoading: boolean) => void
 }
 
 const AnalysisHistoryCtx = createContext<AnalysisHistoryContextType| null>(null)
@@ -23,13 +34,6 @@ export const useSharedAnalysisHistory = () => {
   return ctx
 }
 
-export interface AnalysisHistoryItem {
-  id: string
-  query: string
-  timestamp: number
-  isLoading: boolean
-}
-
 const STORAGE_KEY = 'analysis_history'
 const MAX_HISTORY_ITEMS = 1000
 
@@ -42,7 +46,12 @@ const useAnalysisHistory = () => {
       const stored = localStorage.getItem(STORAGE_KEY)
       if (stored) {
         const parsedHistory = JSON.parse(stored) as AnalysisHistoryItem[]
-        setHistory(parsedHistory)
+        setHistory(
+          parsedHistory.map((item) => ({
+            ...item,
+            kind: item.kind ?? 'standard',
+          }))
+        )
       }
     } catch (error) {
       console.error('Failed to load analysis history:', error)
@@ -59,12 +68,13 @@ const useAnalysisHistory = () => {
   }, [])
 
   // Add new analysis to history
-  const addToHistory = useCallback((id: string, query: string) => {
+  const addToHistory = useCallback((id: string, query: string, kind: AnalysisHistoryKind = 'standard') => {
     const newItem: AnalysisHistoryItem = {
       id,
-      query: query.length > 50 ? query.substring(0, 50) + '...' : query,
+      query,
       timestamp: Date.now(),
-      isLoading: true
+      isLoading: true,
+      kind,
     }
 
       setHistory((prevHistory) => {

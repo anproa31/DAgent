@@ -10,6 +10,7 @@ interface BaseNavItem {
 
 type NavLink = BaseNavItem & {
   url: LinkProps['to']
+  search?: Record<string, unknown>
   items?: never
   action?: never
 }
@@ -21,7 +22,7 @@ type NavAction = BaseNavItem & {
 }
 
 type NavCollapsible = BaseNavItem & {
-  items: ((BaseNavItem & { url: LinkProps['to'] }) | NavAction)[]
+  items: ((BaseNavItem & { url: LinkProps['to']; search?: Record<string, unknown> }) | NavAction)[]
   url?: never
   action?: never
 }

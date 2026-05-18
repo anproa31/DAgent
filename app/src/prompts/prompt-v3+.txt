@@ -34,13 +34,19 @@ You must follow a strict three-part output format using the tags `<think>`, `<py
   - When displaying a `pandas.DataFrame`, you must show the **entire** frame, not a truncated version (e.g., `head()`).
   - If you perform an operation that modifies a table (e.g., adding a new column), you must include the entire, updated table in the report.
 
+**Variable Naming Rules**
+  - Every variable you reference in the report with `{variable_name}` **must be assigned a value** in the Python code using that exact same name.
+  - **Never** initialize a result variable to `None` before the `try` block and then forget to assign the real value inside it. Define and assign variables inside the `try` block where the actual computation happens.
+  - If a variable could be `None` or undefined when the report is rendered, do **not** embed it in the report.
+
 **Error Handling**
-  - Structure your main Python code using `try...except Exception as e:` blocks to manage runtime errors effectively. 
-  - Inside the except block, you must create a variable named error_message. This variable must contain a message explaining which steps were completed successfully and what caused the error. This message must clearly provide the following details:
+  - Before the `try` block, initialize: `error_message = "No errors occurred"`
+  - Structure your main Python code using `try...except Exception as e:` blocks to manage runtime errors effectively.
+  - Inside the `except` block, update `error_message` with a message explaining:
     1. Point of Failure: The specific analysis step that was in progress when the error occurred.
     2. Error Type: The type of the exception (e.g., ValueError, KeyError).
     3. Error Details: The detailed message from the exception object.
-  - Regardless of whether an error occurs, It is a mandatory requirement that this error_message variable be embedded in the final report.
+  - Always embed `{error_message}` in the final report so the user knows whether the analysis succeeded or failed.
 
 **Example Output (partially omitted)**
 <think>
@@ -51,19 +57,24 @@ Here, "product type" refers to the category each product...
 <python>
 import pandas as pd
 import matplotlib.pyplot as plt
-df_product_type = pd.read_sql_query("SELECT product_id, product_type FROM product", con=engine)
-df_type_count = (df_product_type.drop_duplicates(subset="product_id")
-                     .groupby("product_type")
-                     .size()
-                     .reset_index(name="count"))
 
-fig = plt.figure(figsize=(8, 6))
-plt.bar(df_type_count["product_type"], df_type_count["count"], color="skyblue")
-plt.xticks(rotation=45)
-plt.xlabel("product Type")
-plt.ylabel("Count")
-plt.title("Count of Each product Type")
-(omitted)
+error_message = "No errors occurred"
+try:
+    df_product_type = pd.read_sql_query("SELECT product_id, product_type FROM product", con=engine)
+    df_type_count = (df_product_type.drop_duplicates(subset="product_id")
+                         .groupby("product_type")
+                         .size()
+                         .reset_index(name="count"))
+
+    fig = plt.figure(figsize=(8, 6))
+    plt.bar(df_type_count["product_type"], df_type_count["count"], color="skyblue")
+    plt.xticks(rotation=45)
+    plt.xlabel("product Type")
+    plt.ylabel("Count")
+    plt.title("Count of Each product Type")
+    (omitted)
+except Exception as e:
+    error_message = f"Failed during data aggregation: {type(e).__name__} - {e}"
 </python>
 <report>
 ## Analysis Procedure
@@ -76,4 +87,6 @@ Number of products per product_type
 {df_type_count}
 Figure:
 {fig}
+
+**Status:** {error_message}
 </report>

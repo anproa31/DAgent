@@ -118,6 +118,19 @@ const startAnalysis = async (params: StartAnalysisParams): Promise<StartAnalysis
   return response.data
 }
 
+// Title generation API
+const generateTitle = async (params: { query: string; model?: string }): Promise<string> => {
+  try {
+    const response = await axios.post<{ title: string }>(`${API_BASE_URL}/generate-title`, {
+      query: params.query,
+      model: params.model || '',
+    })
+    return response.data.title || params.query.substring(0, 50)
+  } catch {
+    return params.query.length > 50 ? params.query.substring(0, 50) + '...' : params.query
+  }
+}
+
 // Stop analysis API
 const stopAnalysis = async (id: string): Promise<{ success: boolean; error?: string }> => {
   const response = await axios.post<{ success: boolean; error?: string }>(`${API_BASE_URL}/stop-analysis`, null, {
@@ -193,6 +206,13 @@ export const useDeleteSpace = () => {
 export const useStopAnalysis = () => {
   return useMutation({
     mutationFn: stopAnalysis,
+  })
+}
+
+// Title generation hook
+export const useGenerateTitle = () => {
+  return useMutation({
+    mutationFn: generateTitle,
   })
 }
 

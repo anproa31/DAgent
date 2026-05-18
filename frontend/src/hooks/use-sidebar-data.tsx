@@ -1,8 +1,12 @@
 import { useMemo, useCallback } from 'react'
-import { IconDatabase, IconPlus, IconClock } from '@tabler/icons-react'
+import { IconDatabase, IconPlus, IconClock, IconBrain } from '@tabler/icons-react'
 import { useTableList } from '@/hooks/use-table-list'
 import { type SidebarData } from '@/components/layout/types'
-import { useSharedAnalysisHistory } from '@/context/analysis-history-context'
+import {
+  useSharedAnalysisHistory,
+  type AnalysisHistoryItem,
+  type AnalysisHistoryKind,
+} from '@/context/analysis-history-context'
 import { useDeleteSpace } from '@/hooks/use-analysis'
 import { useNavigate, useLocation } from '@tanstack/react-router'
 import { toast } from 'sonner'
@@ -19,21 +23,29 @@ export const useSidebarData = (): {
   const navigate = useNavigate()
   const location = useLocation()
 
-  const handleDelete = useCallback((id: string) => {
-    // Attempt backend deletion (fire-and-forget, ignore 404s for local-only entries)
-    deleteSpaceMutation.mutate(id, {
-      onError: () => {
-        // Space may not exist on backend (e.g. server restarted), that's fine
-      },
-    })
-    // Always remove from local history
-    removeFromHistory(id)
-    toast.success('Conversation deleted')
-    // Navigate to home if the user is currently viewing the deleted conversation
-    if (location.pathname === `/report/${id}`) {
-      navigate({ to: '/' })
-    }
-  }, [deleteSpaceMutation, removeFromHistory, navigate, location.pathname])
+  const handleDelete = useCallback(
+    (deletedId: string, kind: AnalysisHistoryKind) => {
+      if (kind === 'standard') {
+        deleteSpaceMutation.mutate(deletedId, {
+          onError: () => {
+            // Space may not exist on backend (e.g. server restarted), that's fine
+          },
+        })
+      }
+      removeFromHistory(deletedId)
+      toast.success('Conversation deleted')
+      if (location.pathname === `/report/${deletedId}`) {
+        navigate({ to: '/' })
+      }
+      if (location.pathname === '/agents') {
+        const params = new URLSearchParams(location.search)
+        if (params.get('session') === deletedId) {
+          navigate({ to: '/agents', search: {} })
+        }
+      }
+    },
+    [deleteSpaceMutation, removeFromHistory, navigate, location.pathname, location.search]
+  )
 
   const sidebarData = useMemo((): SidebarData | null => {
     if (!tables) return null
@@ -65,6 +77,31 @@ export const useSidebarData = (): {
           ],
         },
         {
+          title: 'Multi-Agent',
+          icon: IconBrain,
+          items: [
+          {
+            title: 'New Agent Analysis',
+            url: '/agents' as any,
+            search: {} as Record<string, unknown>,
+            icon: IconPlus,
+          },
+          ...history
+            .filter((item: AnalysisHistoryItem) => item.kind === 'agent')
+            .map((item: AnalysisHistoryItem) => ({
+              title: item.query,
+              url: '/agents' as any,
+              search: { session: item.id } as Record<string, unknown>,
+              id: item.id,
+              onDelete: (id: string) => handleDelete(id, item.kind),
+              ...(item.isLoading ? { icon: Bars } : {}),
+            })),
+          ...(history.filter((i: AnalysisHistoryItem) => i.kind === 'agent').length === 0
+            ? [{ title: 'No agent analyses yet', url: '#' as any }]
+            : []),
+          ],
+        },
+        {
           title: 'Recent',
           icon: IconClock,
           items: [
@@ -73,20 +110,17 @@ export const useSidebarData = (): {
             url: '/' as any,
             icon: IconPlus,
           },
-          ...history.map((item) => ({
-            title: item.query,
-            url: `/report/${item.id}` as any,
-            id: item.id,
-            onDelete: handleDelete,
-            ...(item.isLoading ? { icon: Bars } : {}),
-          })),
-          ...(history.length === 0
-            ? [
-              {
-              title: 'No recent analyses',
-              url: '#' as any,
-              },
-            ]
+          ...history
+            .filter((item: AnalysisHistoryItem) => item.kind === 'standard')
+            .map((item: AnalysisHistoryItem) => ({
+              title: item.query,
+              url: `/report/${item.id}` as any,
+              id: item.id,
+              onDelete: (id: string) => handleDelete(id, item.kind),
+              ...(item.isLoading ? { icon: Bars } : {}),
+            })),
+          ...(history.filter((i: AnalysisHistoryItem) => i.kind === 'standard').length === 0
+            ? [{ title: 'No recent analyses', url: '#' as any }]
             : []),
           ],
         },

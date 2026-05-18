@@ -1,7 +1,8 @@
 from fastapi import APIRouter, HTTPException
-from ..models.requests import StartAnalysisRequest
-from ..models.responses import StartAnalysisResponse, GetReportResponse, CreateSpaceResponse, GetSpaceResponse, DeleteSpaceResponse, StopAnalysisResponse
+from ..models.requests import StartAnalysisRequest, GenerateTitleRequest
+from ..models.responses import StartAnalysisResponse, GetReportResponse, CreateSpaceResponse, GetSpaceResponse, DeleteSpaceResponse, StopAnalysisResponse, GenerateTitleResponse
 from ..analysis_manager import start_analysis, get_analysis_state, create_space, get_space, delete_space, stop_analysis
+from ..utils.llm_models import get_openai_client, MODELS
 
 router = APIRouter()
 
@@ -85,3 +86,43 @@ async def delete_space_endpoint(space_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Space deletion error: {str(e)}")
+
+@router.post("/generate-title", response_model=GenerateTitleResponse)
+async def generate_title_endpoint(request: GenerateTitleRequest):
+    """Use the LLM to generate a short, descriptive title for a chat session based on the user query."""
+    fallback = request.query[:50] + ("..." if len(request.query) > 50 else "")
+    try:
+        client = get_openai_client(request.model) if request.model else None
+        if client is None and MODELS:
+            client = get_openai_client(MODELS[0]["id"])
+        if client is None:
+            return GenerateTitleResponse(title=fallback)
+
+        model_id = request.model if request.model else (MODELS[0]["id"] if MODELS else "")
+        if not model_id:
+            return GenerateTitleResponse(title=fallback)
+
+        response = await client.chat.completions.create(
+            model=model_id,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You generate concise, descriptive chat titles. "
+                        "Given a data analysis request, reply with ONLY a short title (4-8 words, no quotes, no punctuation at the end). "
+                        "The title should capture the main intent of the analysis."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": f"Generate a title for this analysis request:\n{request.query}",
+                },
+            ],
+            temperature=0.3,
+            max_tokens=30,
+        )
+        raw = (response.choices[0].message.content or "").strip().strip('"').strip("'")
+        title = raw if raw else fallback
+        return GenerateTitleResponse(title=title)
+    except Exception:
+        return GenerateTitleResponse(title=fallback)
