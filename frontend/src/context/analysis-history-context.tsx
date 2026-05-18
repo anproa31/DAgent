@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
 
+import { listSessions } from '@/api/agentApi'
+
 export type AnalysisHistoryKind = 'standard' | 'agent'
 
 export interface AnalysisHistoryItem {
@@ -43,24 +45,74 @@ export const useSharedAnalysisHistory = () => {
 const STORAGE_KEY = 'analysis_history'
 const MAX_HISTORY_ITEMS = 1000
 
+function mergeAgentSessionsFromServer(
+  base: AnalysisHistoryItem[],
+  sessions: { session_id: string; title: string; updated_at: string }[]
+): AnalysisHistoryItem[] {
+  const standard = base.filter((x) => x.kind === 'standard')
+  const localAgents = base.filter((x) => x.kind === 'agent')
+  const serverList = sessions ?? []
+  const fromServer = serverList.map((s) => {
+    const loc = localAgents.find((l) => l.id === s.session_id)
+    return {
+      id: s.session_id,
+      query: s.title || 'Analysis',
+      timestamp: new Date(s.updated_at).getTime(),
+      isLoading: loc?.isLoading ?? false,
+      kind: 'agent' as AnalysisHistoryKind,
+    }
+  })
+  const serverIds = new Set(fromServer.map((s) => s.id))
+  const strayAgents = localAgents.filter((l) => !serverIds.has(l.id))
+  const agentMerged = [...fromServer, ...strayAgents].sort(
+    (a, b) => b.timestamp - a.timestamp
+  )
+  return [...agentMerged, ...standard]
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .slice(0, MAX_HISTORY_ITEMS)
+}
+
 const useAnalysisHistory = () => {
   const [history, setHistory] = useState<AnalysisHistoryItem[]>([])
 
-  // Load history from localStorage
+  // Hydrate from localStorage, then merge persisted agent sessions from the backend
   useEffect(() => {
+    let cancelled = false
+    let initial: AnalysisHistoryItem[] = []
     try {
       const stored = localStorage.getItem(STORAGE_KEY)
       if (stored) {
-        const parsedHistory = JSON.parse(stored) as AnalysisHistoryItem[]
-        setHistory(
-          parsedHistory.map((item) => ({
-            ...item,
-            kind: item.kind ?? 'standard',
-          }))
-        )
+        initial = (JSON.parse(stored) as AnalysisHistoryItem[]).map((item) => ({
+          ...item,
+          kind: item.kind ?? 'standard',
+        }))
       }
     } catch (error) {
       console.error('Failed to load analysis history:', error)
+    }
+    setHistory(initial)
+
+    void (async () => {
+      try {
+        const { sessions } = await listSessions()
+        if (cancelled) return
+        setHistory((prev) => {
+          const base = prev.length > 0 ? prev : initial
+          const merged = mergeAgentSessionsFromServer(base, sessions ?? [])
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(merged))
+          } catch (e) {
+            console.error('Failed to save analysis history:', e)
+          }
+          return merged
+        })
+      } catch {
+        /* agent service unavailable — keep local snapshots only */
+      }
+    })()
+
+    return () => {
+      cancelled = true
     }
   }, [])
 

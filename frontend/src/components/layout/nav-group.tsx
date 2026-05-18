@@ -166,7 +166,7 @@ const SidebarMenuLink = ({
       >
         <Link
           to={(item as NavLink).url}
-          search={(item as NavLink).search}
+          search={(item as NavLink).search as never}
           onClick={() => setOpenMobile(false)}
         >
           {item.icon && <item.icon />}
@@ -230,7 +230,7 @@ const SidebarMenuCollapsible = ({
                       >
                         <Link
                           to={(subItem as NavLink).url}
-                          search={(subItem as NavLink).search}
+                          search={(subItem as NavLink).search as never}
                           onClick={() => setOpenMobile(false)}
                         >
                           {subItem.icon && <subItem.icon />}
@@ -329,7 +329,7 @@ const SidebarMenuCollapsedDropdown = ({
                   <div className="flex items-center w-full group/dropitem">
                     <Link
                       to={(sub as NavLink).url}
-                      search={(sub as NavLink).search}
+                      search={(sub as NavLink).search as never}
                       className={`flex-1 flex items-center gap-2 ${checkIsActive(href, sub as NavItem) ? 'bg-secondary' : ''}`}
                     >
                       {sub.icon && <sub.icon />}
@@ -395,7 +395,7 @@ function parseHref(href: string): { pathname: string; searchParams: URLSearchPar
   }
 }
 
-function checkIsActive(href: string, item: NavItem, mainNav = false) {
+function checkIsActive(href: string, item: NavItem, mainNav = false): boolean {
   const { pathname, searchParams } = parseHref(href)
 
   const linkLike = item as NavLink & { items?: NavItem['items'] }

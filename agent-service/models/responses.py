@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from datetime import datetime
 from typing import List, Optional, Any
 
 
@@ -15,6 +16,22 @@ class SessionRunSummary(BaseModel):
 
 class SessionRunsResponse(BaseModel):
     session_id: str
+    runs: List[SessionRunSummary] = []
+
+
+class SessionListItem(BaseModel):
+    session_id: str
+    title: str
+    updated_at: datetime
+
+
+class SessionListResponse(BaseModel):
+    sessions: List[SessionListItem] = []
+
+
+class SessionDetailResponse(BaseModel):
+    session_id: str
+    title: str
     runs: List[SessionRunSummary] = []
 
 

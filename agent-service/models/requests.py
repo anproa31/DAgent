@@ -3,7 +3,7 @@ from typing import List, Optional
 
 
 class CreateSessionRequest(BaseModel):
-    pass
+    title: str = ""
 
 
 class StartRunRequest(BaseModel):

@@ -30,3 +30,6 @@ frontend/*.local
 *.sln
 *.sw?
 log
+
+# Agent service SQLite (sessions & runs)
+agent-service/data/

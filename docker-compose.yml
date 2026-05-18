@@ -1,15 +1,14 @@
-name: daa
+name: daa-prod
 
 services:
   sandbox:
     build: ./sandbox
-    container_name: sandbox_service
+    container_name: daa_prod_sandbox
     networks:
       - app_network
     environment:
-      # The sandbox bootstraps datasources from the app on startup.
-      APP_SERVICE_URL: http://app:8000
-      # DuckDB database file lives on the shared volume so it survives container restarts.
+      # Same service keys as docker-compose.dev.yml — URLs match .env.example defaults.
+      APP_SERVICE_URL: ${APP_SERVICE_URL:-http://app:8000}
       SANDBOX_DUCKDB_PATH: /data/sandbox.duckdb
     volumes:
       - datasource_data:/data
@@ -19,14 +18,13 @@ services:
     build:
       context: ./app
       dockerfile: Dockerfile
-    container_name: app_service
+    container_name: daa_prod_app
     extra_hosts:
       - host.docker.internal:host-gateway
     ports:
       - "8073:8000"
     environment:
-      CODE_RUNNER_URL: http://sandbox:8001/
-      # Datasource registry storage (uploaded files + registry.json).
+      CODE_RUNNER_URL: ${CODE_RUNNER_URL:-http://sandbox:8001/}
       DATASOURCE_ROOT: /data/datasources
     networks:
       - app_network
@@ -40,14 +38,16 @@ services:
     build:
       context: ./agent-service
       dockerfile: Dockerfile
-    container_name: agent_service
+    container_name: daa_prod_agent
     extra_hosts:
       - host.docker.internal:host-gateway
     ports:
       - "8074:8000"
     environment:
-      CODE_RUNNER_URL: http://sandbox:8001/
-      APP_SERVICE_URL: http://app:8000
+      CODE_RUNNER_URL: ${CODE_RUNNER_URL:-http://sandbox:8001/}
+      APP_SERVICE_URL: ${APP_SERVICE_URL:-http://app:8000}
+    volumes:
+      - agent_service_data:/usr/src/app/data
     networks:
       - app_network
     depends_on:
@@ -72,6 +72,9 @@ networks:
     driver: bridge
 
 volumes:
-  # Shared volume used by both ``app`` (registry + uploaded files) and the
-  # ``sandbox`` (DuckDB database file).
+  # Shared volume used by both ``app`` (registry + uploads) and ``sandbox`` (DuckDB).
   datasource_data:
+    name: prod_datasource_data
+  # SQLite DB for agent chat session history.
+  agent_service_data:
+    name: prod_agent_data

@@ -35,10 +35,10 @@ cd data-analyst-agent
 docker compose -f docker-compose.dev.yml up
 docker compose -f docker-compose.dev.yml build --no-cache
 ```
-This command sets up 4 containers: **Application**, **Python+SQL Sandbox** (DuckDB-backed), **Agent Service**, and **Frontend**. Wait for all containers to start, then access "http://localhost:3030".
+This command sets up 4 containers: **Application**, **Python+SQL Sandbox** (DuckDB-backed), **Agent Service**, and **Frontend**. Wait for all containers to start, then open **http://localhost:3130** (dev ports **8173** / **8174** for app and agent API). Production stack (`docker-compose.yml`) uses **3030**, **8073**, **8074** so both stacks can run side by side with distinct Compose project names (`daa-dev` / `daa-prod`).
 
 > **Datasource storage:** Uploaded files (CSV, Excel, SQLite, Parquet) and the
-> registry manifest live on a shared Docker volume named `datasource_data`. The
+> registry manifest share a Docker volume: **`dev_datasource_data`** (dev compose) or **`prod_datasource_data`** (prod compose). The
 > sandbox queries them in-place through DuckDB — there is no longer a separate
 > PostgreSQL container.
 You can use any LLM provider’s model by setting the base_url and api_key from the settings icon in the top right (by default, Ollama is used).
@@ -114,10 +114,10 @@ SQL agent (and any Python code) can query CSVs, Excel sheets, and a live
 Postgres database in the same query without prior ETL.
 
 ### Connect to an external database
-Use the new datasource endpoint with a structured payload:
+Use the new datasource endpoint with a structured payload (use **8173** for dev compose, **8073** for prod):
 
 ```bash
-curl -X POST http://localhost:8073/api/datasources/connect \
+curl -X POST http://localhost:8173/api/datasources/connect \
   -H "Content-Type: application/json" \
   -d '{
     "name": "analytics_pg",
@@ -133,7 +133,7 @@ curl -X POST http://localhost:8073/api/datasources/connect \
 Or via a connection string:
 
 ```bash
-curl -X POST http://localhost:8073/api/datasources/connect \
+curl -X POST http://localhost:8173/api/datasources/connect \
   -H "Content-Type: application/json" \
   -d '{
     "name": "analytics_pg",

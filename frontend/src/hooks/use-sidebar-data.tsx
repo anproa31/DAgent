@@ -1,6 +1,7 @@
 import { useMemo, useCallback } from 'react'
 import { IconDatabase, IconPlus, IconBrain } from '@tabler/icons-react'
 import { useTableList } from '@/hooks/use-table-list'
+import { deleteSession } from '@/api/agentApi'
 import { DATASOURCE_TYPE_LABELS } from '@/api/datasources'
 import { type SidebarData } from '@/components/layout/types'
 import {
@@ -23,16 +24,27 @@ export const useSidebarData = (): {
 
   const handleDelete = useCallback(
     (deletedId: string) => {
-      removeFromHistory(deletedId)
-      toast.success('Conversation deleted')
-      if (location.pathname === '/agents') {
-        const params = new URLSearchParams(location.search)
-        if (params.get('session') === deletedId) {
-          navigate({ to: '/agents', search: {} })
+      const item = history.find((h) => h.id === deletedId)
+      void (async () => {
+        if (item?.kind === 'agent') {
+          try {
+            await deleteSession(deletedId)
+          } catch {
+            toast.error('Could not delete conversation on server')
+            return
+          }
         }
-      }
+        removeFromHistory(deletedId)
+        toast.success('Conversation deleted')
+        if (location.pathname === '/agents') {
+          const params = new URLSearchParams(location.search)
+          if (params.get('session') === deletedId) {
+            navigate({ to: '/agents', search: {} })
+          }
+        }
+      })()
     },
-    [removeFromHistory, navigate, location.pathname, location.search]
+    [removeFromHistory, navigate, location.pathname, location.search, history]
   )
 
   const sidebarData = useMemo((): SidebarData | null => {
