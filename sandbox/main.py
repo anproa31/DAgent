@@ -19,9 +19,10 @@ app = FastAPI()
 DB_READER_USER = os.getenv("DB_READER_USER")
 DB_READER_PASSWORD = os.getenv("DB_READER_PASSWORD")
 POSTGRES_DB = os.getenv("POSTGRES_DB")
-DEFAULT_DB_URL = f"postgresql://{DB_READER_USER}:{DB_READER_PASSWORD}@data-analysis-agent-db:5432/{POSTGRES_DB}"
+POSTGRES_HOST = os.getenv("POSTGRES_HOST", "db")
+DEFAULT_DB_URL = f"postgresql://{DB_READER_USER}:{DB_READER_PASSWORD}@{POSTGRES_HOST}:5432/{POSTGRES_DB}"
 
-# If USER_DATABASE_URL is set, use it preferentially
+
 DATABASE_URL = os.getenv("USER_DATABASE_URL", DEFAULT_DB_URL)
 
 try:
