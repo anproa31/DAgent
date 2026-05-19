@@ -103,6 +103,11 @@ export interface ErrorEvent {
   message: string
 }
 
+export interface TitleUpdatedEvent {
+  session_id: string
+  title: string
+}
+
 // ── REST API ─────────────────────────────────────────────────────────────────
 
 export const createSession = async (): Promise<CreateSessionResponse> => {
@@ -176,6 +181,31 @@ export const getRunReport = async (runId: string): Promise<RunReport> => {
   return res.data
 }
 
+export interface GenerateTitleRequest {
+  query: string
+  model?: string
+  base_url?: string
+  api_key?: string
+}
+
+/** Generate a short sidebar title for a new chat session from the first user query. */
+export const generateTitle = async (body: GenerateTitleRequest): Promise<string> => {
+  try {
+    const res = await axios.post<{ title: string }>(
+      `${AGENT_BASE_URL}/agent/generate-title`,
+      {
+        query: body.query,
+        model: body.model ?? '',
+        base_url: body.base_url ?? '',
+        api_key: body.api_key ?? '',
+      }
+    )
+    return res.data.title || body.query.substring(0, 50)
+  } catch {
+    return body.query.length > 50 ? `${body.query.substring(0, 50)}...` : body.query
+  }
+}
+
 // ── SSE Streaming ────────────────────────────────────────────────────────────
 
 export interface SSEHandlers {
@@ -183,6 +213,7 @@ export interface SSEHandlers {
   onAgentUpdate?: (data: AgentUpdateEvent) => void
   onSqlGenerated?: (data: SqlGeneratedEvent) => void
   onAnswerChunk?: (data: AnswerChunkEvent) => void
+  onTitleUpdated?: (data: TitleUpdatedEvent) => void
   onDone?: (data: DoneEvent) => void
   onError?: (data: ErrorEvent) => void
   onClose?: () => void
@@ -214,6 +245,10 @@ export function streamRun(runId: string, handlers: SSEHandlers): EventSource {
 
   es.addEventListener('answer_chunk', (e: MessageEvent) => {
     handlers.onAnswerChunk?.(parse(e.data))
+  })
+
+  es.addEventListener('title_updated', (e: MessageEvent) => {
+    handlers.onTitleUpdated?.(parse(e.data))
   })
 
   es.addEventListener('done', (e: MessageEvent) => {

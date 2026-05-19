@@ -13,6 +13,7 @@ from models.requests import StartRunRequest, ApproveRequest, RejectRequest
 from models.responses import StartRunResponse, ApproveResponse, RejectResponse, RunReportResponse
 from repositories import run_repository, session_repository
 from run_registry import RUN_STATES
+from routers.title import update_session_title_if_empty
 
 router = APIRouter()
 
@@ -35,15 +36,31 @@ class RunState:
         self.error: str = ""
 
 
-def _title_hint_from_query(query: str) -> str:
-    q = (query or "").strip().split("\n")[0].strip()
-    return (q[:120] + "…") if len(q) > 120 else q
-
-
 def _normalize_report_content(rc: Any) -> List[Any]:
     if rc is None:
         return []
     return rc if isinstance(rc, list) else []
+
+
+async def _emit_title_updated_if_needed(run: RunState, initial_input: dict) -> None:
+    """Persist LLM session title and notify the client before the stream closes."""
+    try:
+        new_title = await update_session_title_if_empty(
+            run.session_id,
+            run.query,
+            initial_input.get("model") or "",
+            initial_input.get("base_url") or "",
+            initial_input.get("api_key") or "",
+        )
+        if new_title:
+            await run.event_queue.put(
+                {
+                    "event": "title_updated",
+                    "data": {"session_id": run.session_id, "title": new_title},
+                }
+            )
+    except Exception as te:
+        print(f"[runs] title update failed for session {run.session_id}: {te}")
 
 
 async def _persist_run_to_db(run: RunState) -> None:
@@ -183,11 +200,13 @@ async def _run_graph(run: RunState, initial_input: dict):
             run.error = vals.get("error", "")
 
         run.done = True
+        await _emit_title_updated_if_needed(run, initial_input)
         await _emit("done", {"content": run.report_content, "insights": run.insights})
 
     except Exception as e:
         run.error = str(e)
         run.done = True
+        await _emit_title_updated_if_needed(run, initial_input)
         await run.event_queue.put({"event": "error", "data": {"message": str(e)}})
         print(f"[runs] graph error for run {run.run_id}: {e}")
     finally:
@@ -211,9 +230,6 @@ async def start_run(session_id: str, body: StartRunRequest):
         if not sess:
             raise HTTPException(status_code=404, detail="Session not found")
         await run_repository.create_run(db, run_id, session_id, body.query)
-        await session_repository.set_session_title_if_empty(
-            db, session_id, _title_hint_from_query(body.query)
-        )
         await session_repository.touch_session(db, session_id)
 
     run = RunState(session_id=session_id, run_id=run_id, query=body.query)

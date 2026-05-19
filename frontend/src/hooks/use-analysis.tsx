@@ -3,6 +3,8 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { useSettings } from '@/context/settings-context'
 
 const API_BASE_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:8000"
+const AGENT_BASE_URL =
+  import.meta.env.VITE_AGENT_SERVICE_URL || "http://localhost:8074"
 
 // Parameters for starting analysis
 export interface StartAnalysisParams {
@@ -121,10 +123,13 @@ const startAnalysis = async (params: StartAnalysisParams): Promise<StartAnalysis
 // Title generation API
 const generateTitle = async (params: { query: string; model?: string }): Promise<string> => {
   try {
-    const response = await axios.post<{ title: string }>(`${API_BASE_URL}/generate-title`, {
-      query: params.query,
-      model: params.model || '',
-    })
+    const response = await axios.post<{ title: string }>(
+      `${AGENT_BASE_URL}/agent/generate-title`,
+      {
+        query: params.query,
+        model: params.model || '',
+      }
+    )
     return response.data.title || params.query.substring(0, 50)
   } catch {
     return params.query.length > 50 ? params.query.substring(0, 50) + '...' : params.query
