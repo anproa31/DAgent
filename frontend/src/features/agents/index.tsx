@@ -37,6 +37,7 @@ import {
   rejectSQL,
   getRunReport,
   getSessionRuns,
+  generateTitle,
 } from '@/api/agentApi'
 import type { RunReport } from '@/api/agentApi'
 import { useSharedAnalysisHistory } from '@/context/analysis-history-context'
@@ -257,7 +258,13 @@ export default function AgentsPage() {
   const { data: modelData } = useModelListByMode(false)
   const { session: sessionFromUrl } = agentsRouteApi.useSearch()
   const navigate = useNavigate()
-  const { addToHistory, setItemLoading, replaceAgentHistorySession } = useSharedAnalysisHistory()
+  const {
+    addToHistory,
+    setItemLoading,
+    replaceAgentHistorySession,
+    updateHistoryTitle,
+    refreshAgentSessionsFromServer,
+  } = useSharedAnalysisHistory()
 
   const [query, setQuery] = useState('')
   const [model, setModel] = useState('')
@@ -306,6 +313,21 @@ export default function AgentsPage() {
       }
     }, 300)
   }, [])
+
+  /** Optimistic sidebar label, then LLM title via API (fast) and SSE / listSessions (authoritative). */
+  const scheduleSessionTitleUpdate = useCallback(
+    (sessionIdForTitle: string, queryText: string) => {
+      void generateTitle({
+        query: queryText,
+        model,
+        base_url: baseUrl,
+        api_key: apiKey,
+      }).then((title) => {
+        updateHistoryTitle(sessionIdForTitle, title)
+      })
+    },
+    [model, baseUrl, apiKey, updateHistoryTitle]
+  )
 
   useEffect(() => {
     if (!sessionFromUrl) {
@@ -402,16 +424,23 @@ export default function AgentsPage() {
             onAgentUpdate: (d) => handleAgentUpdate(lastRun.runId, d),
             onSqlGenerated: (d) => handleSqlGenerated(lastRun.runId, d),
             onAnswerChunk: (d) => handleAnswerChunk(lastRun.runId, d),
+            onTitleUpdated: (d) => {
+              if (d.session_id && d.title) {
+                updateHistoryTitle(d.session_id, d.title)
+              }
+            },
             onDone: (d) => {
               handleDone(lastRun.runId, d)
               setItemLoading(sessionFromUrl, false)
               setSubmitStatus('ready')
+              void refreshAgentSessionsFromServer()
             },
             onError: (d) => {
               handleError(lastRun.runId, d.message)
               toast.error(d.message)
               setItemLoading(sessionFromUrl, false)
               setSubmitStatus('ready')
+              void refreshAgentSessionsFromServer()
             },
             onClose: () => {
               setSubmitStatus('ready')
@@ -434,7 +463,22 @@ export default function AgentsPage() {
     return () => {
       cancelled = true
     }
-  }, [sessionFromUrl])
+  }, [
+    sessionFromUrl,
+    updateHistoryTitle,
+    refreshAgentSessionsFromServer,
+    navigate,
+    setSessionId,
+    setRunsFromReports,
+    setItemLoading,
+    setActiveRunId,
+    setThinking,
+    handleAgentUpdate,
+    handleSqlGenerated,
+    handleAnswerChunk,
+    handleDone,
+    handleError,
+  ])
 
   useEffect(() => {
     if (!modelData?.models?.length) return
@@ -532,22 +576,20 @@ export default function AgentsPage() {
 
       try {
         let currentSessionId: string
+        let createdNewSession = false
 
         if (opts?.replaceHistorySessionId) {
           const sessionRes = await createSession()
           currentSessionId = sessionRes.session_id
           setSessionId(currentSessionId)
-          replaceAgentHistorySession(
-            opts.replaceHistorySessionId,
-            currentSessionId,
-            trimmed
-          )
+          createdNewSession = true
         } else {
           currentSessionId = sessionId ?? ''
           if (!currentSessionId) {
             const sessionRes = await createSession()
             currentSessionId = sessionRes.session_id
             setSessionId(currentSessionId)
+            createdNewSession = true
           }
         }
 
@@ -568,8 +610,17 @@ export default function AgentsPage() {
         setSessionTables(currentSessionId, selectedTables)
         addRun(run_id, currentSessionId, trimmed)
 
-        if (!opts?.replaceHistorySessionId) {
-          addToHistory(currentSessionId, trimmed, 'agent')
+        if (createdNewSession) {
+          if (opts?.replaceHistorySessionId) {
+            replaceAgentHistorySession(
+              opts.replaceHistorySessionId,
+              currentSessionId,
+              trimmed
+            )
+          } else {
+            addToHistory(currentSessionId, trimmed, 'agent')
+          }
+          scheduleSessionTitleUpdate(currentSessionId, trimmed)
         }
 
         if (!sessionFromUrl || sessionFromUrl !== currentSessionId) {
@@ -584,16 +635,23 @@ export default function AgentsPage() {
           onAgentUpdate: (d) => handleAgentUpdate(run_id, d),
           onSqlGenerated: (d) => handleSqlGenerated(run_id, d),
           onAnswerChunk: (d) => handleAnswerChunk(run_id, d),
+          onTitleUpdated: (d) => {
+            if (d.session_id && d.title) {
+              updateHistoryTitle(d.session_id, d.title)
+            }
+          },
           onDone: (d) => {
             handleDone(run_id, d)
             setItemLoading(currentSessionId!, false)
             setSubmitStatus('ready')
+            void refreshAgentSessionsFromServer()
           },
           onError: (d) => {
             handleError(run_id, d.message)
             toast.error(d.message)
             setItemLoading(currentSessionId!, false)
             setSubmitStatus('ready')
+            void refreshAgentSessionsFromServer()
           },
           onClose: () => {
             setItemLoading(currentSessionId!, false)
@@ -624,6 +682,9 @@ export default function AgentsPage() {
       navigate,
       addToHistory,
       replaceAgentHistorySession,
+      updateHistoryTitle,
+      refreshAgentSessionsFromServer,
+      scheduleSessionTitleUpdate,
       setItemLoading,
       setSessionId,
       setSessionTables,

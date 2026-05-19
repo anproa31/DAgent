@@ -22,6 +22,10 @@ interface AnalysisHistoryContextType {
     nextSessionId: string,
     query: string
   ) => void
+  /** Update sidebar label when LLM title is ready (local + storage). */
+  updateHistoryTitle: (id: string, title: string) => void
+  /** Merge persisted agent session titles from the backend (fallback after run completes). */
+  refreshAgentSessionsFromServer: () => Promise<void>
   removeFromHistory: (id: string) => void
   clearHistory: () => void
   setItemLoading: (id: string, isLoading: boolean) => void
@@ -160,6 +164,34 @@ const useAnalysisHistory = () => {
 
   }, [saveToStorage])
 
+  const updateHistoryTitle = useCallback(
+    (id: string, title: string) => {
+      const trimmed = title.trim()
+      if (!id?.trim() || !trimmed) return
+      setHistory((prevHistory) => {
+        const newHistory = prevHistory.map((item) =>
+          item.id === id ? { ...item, query: trimmed } : item
+        )
+        saveToStorage(newHistory)
+        return newHistory
+      })
+    },
+    [saveToStorage]
+  )
+
+  const refreshAgentSessionsFromServer = useCallback(async () => {
+    try {
+      const { sessions } = await listSessions()
+      setHistory((prev) => {
+        const merged = mergeAgentSessionsFromServer(prev, sessions ?? [])
+        saveToStorage(merged)
+        return merged
+      })
+    } catch {
+      /* agent service unavailable */
+    }
+  }, [saveToStorage])
+
   const replaceAgentHistorySession = useCallback(
     (previousSessionId: string, nextSessionId: string, query: string) => {
       if (!previousSessionId?.trim() || !nextSessionId?.trim()) return
@@ -242,6 +274,8 @@ const useAnalysisHistory = () => {
     setItemLoading,
     addToHistory,
     replaceAgentHistorySession,
+    updateHistoryTitle,
+    refreshAgentSessionsFromServer,
     removeFromHistory,
     clearHistory,
   }
