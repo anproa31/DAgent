@@ -38,6 +38,7 @@ import {
   getRunReport,
   getSessionRuns,
   generateTitle,
+  stopRun,
 } from '@/api/agentApi'
 import type { RunReport } from '@/api/agentApi'
 import { useSharedAnalysisHistory } from '@/context/analysis-history-context'
@@ -301,6 +302,7 @@ export default function AgentsPage() {
     setRunsFromReports,
     setActiveRunId,
     setSessionTables,
+    updatePendingSql,
   } = useAgentStore()
 
   const approvalRun = runs.find((r: AgentRun) => r.phase === 'awaiting_approval') ?? null
@@ -707,10 +709,20 @@ export default function AgentsPage() {
     async ({ index, query: edited }: { index: number; query: string }) => {
       const trimmed = edited.trim()
       if (!trimmed) return
+
+      // Stop any active streaming
       esRef.current?.close()
       esRef.current = null
+      setSubmitStatus('ready')
+
+      // Stop all runs from edit point onward (including the edited run itself)
+      const runsToStop = runs.slice(index)
+      await Promise.all(runsToStop.map((r) => stopRun(r.runId).catch(() => {})))
+
+      // Truncate local state at edit point - removes edited run and all after
       truncateRunsAfter(index)
 
+      // Fork: create new child session from edited prompt
       const previousSessionId = sessionFromUrl ?? sessionId ?? ''
       await runQuery(
         trimmed,
@@ -719,12 +731,13 @@ export default function AgentsPage() {
           : undefined
       )
     },
-    [runQuery, truncateRunsAfter, sessionFromUrl, sessionId]
+    [runs, runQuery, truncateRunsAfter, sessionFromUrl, sessionId]
   )
 
   const handleApproveSQL = useCallback(
     async (editedSql: string) => {
       if (!approvalRun) return
+      updatePendingSql(approvalRun.runId, editedSql)
       setPhase(approvalRun.runId, 'running')
       try {
         await approveSQL(approvalRun.runId, editedSql)
@@ -732,15 +745,15 @@ export default function AgentsPage() {
         toast.error('Failed to send approval')
       }
     },
-    [approvalRun, setPhase]
+    [approvalRun, setPhase, updatePendingSql]
   )
 
   const handleRejectSQL = useCallback(
-    async (reason: string) => {
+    async (reason: string, sql: string) => {
       if (!approvalRun) return
       setPhase(approvalRun.runId, 'running')
       try {
-        await rejectSQL(approvalRun.runId, reason)
+        await rejectSQL(approvalRun.runId, reason, sql)
       } catch {
         toast.error('Failed to send rejection')
       }

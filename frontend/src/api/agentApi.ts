@@ -165,11 +165,12 @@ export const approveSQL = async (
 
 export const rejectSQL = async (
   runId: string,
-  reason: string
+  reason: string,
+  sql?: string
 ): Promise<{ success: boolean }> => {
   const res = await axios.post<{ success: boolean }>(
     `${AGENT_BASE_URL}/agent/runs/${runId}/reject`,
-    { reason }
+    { reason, sql }
   )
   return res.data
 }
@@ -177,6 +178,13 @@ export const rejectSQL = async (
 export const getRunReport = async (runId: string): Promise<RunReport> => {
   const res = await axios.get<RunReport>(
     `${AGENT_BASE_URL}/agent/runs/${runId}/report`
+  )
+  return res.data
+}
+
+export const stopRun = async (runId: string): Promise<{ success: boolean; already_stopped?: boolean }> => {
+  const res = await axios.post<{ success: boolean; already_stopped?: boolean }>(
+    `${AGENT_BASE_URL}/agent/runs/${runId}/stop`
   )
   return res.data
 }

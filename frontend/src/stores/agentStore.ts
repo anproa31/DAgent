@@ -60,6 +60,7 @@ interface AgentStore {
   setThinking: (runId: string, message: string, agent: string) => void
   handleAgentUpdate: (runId: string, data: AgentUpdateEvent) => void
   handleSqlGenerated: (runId: string, data: SqlGeneratedEvent) => void
+  updatePendingSql: (runId: string, sql: string) => void
   handleAnswerChunk: (runId: string, data: AnswerChunkEvent) => void
   handleDone: (runId: string, data: DoneEvent) => void
   handleError: (runId: string, message: string) => void
@@ -169,6 +170,11 @@ export const useAgentStore = create<AgentStore>()(
             pendingSql: data.sql,
             pendingSqlExplanation: data.explanation,
           }),
+        })),
+
+      updatePendingSql: (runId, sql) =>
+        set((s) => ({
+          runs: updateRun(s.runs, runId, { pendingSql: sql }),
         })),
 
       handleAnswerChunk: (runId, data) =>

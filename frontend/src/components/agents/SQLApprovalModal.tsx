@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -17,7 +17,7 @@ interface SQLApprovalModalProps {
   sql: string
   explanation: string
   onApprove: (sql: string) => void
-  onReject: (reason: string) => void
+  onReject: (reason: string, sql: string) => void
 }
 
 export function SQLApprovalModal({
@@ -31,11 +31,14 @@ export function SQLApprovalModal({
   const [isEditing, setIsEditing] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
   const [showRejectInput, setShowRejectInput] = useState(false)
+  const hasSqlChanged = editedSql !== sql
 
-  // Sync edited SQL when sql prop changes
-  if (!isEditing && editedSql !== sql) {
-    setEditedSql(sql)
-  }
+  // Sync edited SQL only when modal opens or sql prop changes from a new run
+  useEffect(() => {
+    if (open) {
+      setEditedSql(sql)
+    }
+  }, [sql, open])
 
   const handleApprove = () => {
     onApprove(editedSql)
@@ -44,14 +47,15 @@ export function SQLApprovalModal({
   }
 
   const handleRejectSubmit = () => {
-    onReject(rejectReason || 'Rejected by user')
+    const reason = rejectReason.trim() || (hasSqlChanged ? 'SQL edited by user' : 'Rejected by user')
+    onReject(reason, editedSql)
     setShowRejectInput(false)
     setRejectReason('')
   }
 
   return (
     <Dialog open={open}>
-      <DialogContent className='max-w-2xl'>
+      <DialogContent className='max-w-2xl' showCloseButton={false}>
         <DialogHeader>
           <DialogTitle className='flex items-center gap-2'>
             <Badge variant='outline' className='text-amber-600 border-amber-400'>
@@ -104,7 +108,7 @@ export function SQLApprovalModal({
         {showRejectInput && (
           <div className='space-y-2'>
             <label className='text-xs text-muted-foreground'>
-              Reason for rejection (optional — helps the agent regenerate):
+              Reason for rejection or edit SQL (required — helps the agent regenerate):
             </label>
             <Textarea
               placeholder='e.g. "Missing filter for current month", "Wrong table used"…'
@@ -145,6 +149,7 @@ export function SQLApprovalModal({
               <Button
                 variant='destructive'
                 onClick={handleRejectSubmit}
+                disabled={!rejectReason.trim() && !hasSqlChanged}
               >
                 <XCircle className='h-4 w-4 mr-2' />
                 Send Rejection
