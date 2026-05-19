@@ -12,6 +12,7 @@ from services.schema_service import (
 from utils.agent_logger import get_logger
 from utils.llm_client import chat_complete, get_async_client
 from utils.prompts import PLANNER_SYSTEM, format_semantic_context_for_prompt
+from agents.reflection_rl import get_policy_suggestion
 
 logger = get_logger("planner")
 
@@ -42,6 +43,20 @@ async def planner_node(state: AgentState) -> dict:
         is_first_step,
         is_replan_from_reflection,
     )
+
+    # Check if we just completed SQL execution after HITL approval (indicates we've acted on reflection feedback)
+    just_completed_sql_after_approval = (
+        last_observation.get("agent") == "code_executor"
+        and last_observation.get("status") == "success"
+        and last_observation.get("artifacts", {}).get("sql_approved")
+    )
+
+    # Clear reflection_replan_reason after successfully executing SQL post-approval
+    # This prevents planner from re-planning again when we've already acted on the feedback
+    if just_completed_sql_after_approval and is_replan_from_reflection:
+        logger.info("cleared reflection_replan_reason after successful SQL execution")
+        reflection_replan_reason = ""
+        is_replan_from_reflection = False
 
     # Increment replan_count when re-planning from reflection
     if is_replan_from_reflection:
@@ -105,6 +120,10 @@ async def planner_node(state: AgentState) -> dict:
     # Compress history for prompt (last N steps + full last observation)
     compressed_history = _compress_planner_history(planner_history, keep_last_n=5)
 
+    # Query RL memory for policy suggestion (bias toward successful pipelines)
+    rl_suggestion = get_policy_suggestion(state.get("query", ""), state.get("intent", "RETRIEVAL"))
+    rl_context = _format_rl_suggestion(rl_suggestion) if rl_suggestion else "(No historical patterns available)"
+
     messages = [
         {"role": "system", "content": PLANNER_SYSTEM.format(MAX_PLANNER_STEPS=MAX_PLANNER_STEPS)},
         {
@@ -121,6 +140,7 @@ async def planner_node(state: AgentState) -> dict:
                 f"Reflection feedback (if re-planning): {reflection_feedback}\n\n"
                 f"Reflection replan reason (if re-planning): {reflection_replan_reason}\n\n"
                 f"Step index: {planner_step_index} / {MAX_PLANNER_STEPS}\n\n"
+                f"RL Policy Suggestion (from historical success patterns):\n{rl_context}\n\n"
                 f"Decide the NEXT action:"
             ),
         },
@@ -212,6 +232,15 @@ def _compress_planner_history(history: list, keep_last_n: int = 5) -> str:
         lines.append(f"Step {i+1}: thought={thought}... | action={action} | observation={obs_summary}")
 
     return "\n".join(lines)
+
+
+def _format_rl_suggestion(suggestion: Dict[str, Any]) -> str:
+    """Format RL policy suggestion for planner prompt."""
+    source = suggestion.get("source", "unknown")
+    pipeline = suggestion.get("pipeline", [])
+    confidence = suggestion.get("confidence", 0.0)
+
+    return f"Source: {source} | Pipeline: {pipeline} | Confidence: {confidence:.2f}"
 
 
 def route_after_planner(state: AgentState) -> str:

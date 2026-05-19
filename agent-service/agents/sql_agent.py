@@ -19,15 +19,32 @@ async def sql_agent_node(state: AgentState) -> dict:
     ctx = format_semantic_context_for_prompt(state.get("enhanced_context", ""))
 
     system_prompt = SQL_AGENT_SYSTEM.format(context=ctx, schema=schema)
+
+    # Check if we have user-edited SQL from a rejection
+    user_edited_sql = state.get("sql_draft", "")
+    rejection_reason = state.get("sql_rejection_reason", "")
+
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": state["query"]},
     ]
 
-    # Retry logic: if rejected previously, include rejection reason in messages
-    rejection_reason = state.get("sql_rejection_reason", "")
-    if rejection_reason and state.get("sql_draft"):
-        messages.append({"role": "assistant", "content": f"SQL: {state['sql_draft']}"})
+    # Retry logic: if rejected previously, include rejection reason and user's edited SQL
+    if rejection_reason and user_edited_sql:
+        # User provided edited SQL with rejection - use it as base for regeneration
+        messages.append({"role": "assistant", "content": f"SQL: {user_edited_sql}"})
+        messages.append(
+            {
+                "role": "user",
+                "content": (
+                    f"The previous SQL was rejected with feedback: {rejection_reason}\n"
+                    f"User provided this edited SQL: {user_edited_sql}\n"
+                    "Please regenerate a corrected SQL query that addresses the feedback."
+                ),
+            }
+        )
+    elif rejection_reason:
+        # Rejected but no user-edited SQL - just regenerate from scratch
         messages.append(
             {
                 "role": "user",
