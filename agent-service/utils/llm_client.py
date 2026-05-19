@@ -2,6 +2,10 @@ import os
 import openai
 from typing import Optional
 
+from utils.agent_logger import get_logger, truncate
+
+logger = get_logger("llm")
+
 
 def get_async_client(base_url: str = "", api_key: str = "") -> openai.AsyncOpenAI:
     """Build an AsyncOpenAI client with the given or env-configured settings."""
@@ -26,12 +30,35 @@ async def chat_complete(
     messages: list,
     temperature: float = 0.2,
     stream: bool = False,
+    log_tag: str = "llm",
 ) -> str:
     """Helper: non-streaming chat completion, returns content string."""
+    roles = [m.get("role", "?") for m in messages]
+    last_user = next(
+        (m.get("content", "") for m in reversed(messages) if m.get("role") == "user"),
+        "",
+    )
+    logger.info(
+        "[%s] request model=%s temperature=%s messages=%d roles=%s",
+        log_tag,
+        model,
+        temperature,
+        len(messages),
+        roles,
+    )
+    logger.debug("[%s] last user message: %s", log_tag, truncate(last_user, 800))
+
     response = await client.chat.completions.create(
         model=model,
         messages=messages,
         temperature=temperature,
         stream=stream,
     )
-    return response.choices[0].message.content or ""
+    content = response.choices[0].message.content or ""
+    logger.info(
+        "[%s] response (%d chars): %s",
+        log_tag,
+        len(content),
+        truncate(content, int(os.getenv("LOG_LLM_RESPONSE_MAX", "4000"))),
+    )
+    return content

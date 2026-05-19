@@ -1,13 +1,17 @@
 import re
 from langgraph.types import interrupt
 from agents.state import AgentState
+from agents.planner import create_observation
+from utils.agent_logger import get_logger
 from utils.llm_client import get_async_client, chat_complete
 from utils.prompts import SQL_AGENT_SYSTEM, format_semantic_context_for_prompt
+
+logger = get_logger("sql_agent")
 
 
 async def sql_agent_node(state: AgentState) -> dict:
     """Generate SQL from the natural-language query, then pause for human review."""
-    print(f"[sql_agent] generating SQL for: {state['query'][:80]}")
+    logger.info("enter query=%r", state["query"][:80])
 
     client = get_async_client(state.get("base_url", ""), state.get("api_key", ""))
     model = state.get("model", "")
@@ -35,13 +39,21 @@ async def sql_agent_node(state: AgentState) -> dict:
         )
 
     try:
-        raw = await chat_complete(client, model, messages, temperature=0.1)
+        raw = await chat_complete(client, model, messages, temperature=0.1, log_tag="sql_agent")
     except Exception as e:
-        print(f"[sql_agent] LLM error: {e}")
+        logger.error("LLM error: %s", e)
+        obs = create_observation(
+            agent_name="sql",
+            status="error",
+            summary=f"SQL generation failed: {e}",
+            artifacts={"sql_draft": "", "sql_explanation": ""},
+            error=str(e),
+        )
         return {
             "current_agent": "sql",
             "error": f"SQL generation failed: {e}",
             "agent_steps": state.get("agent_steps", []) + ["sql"],
+            "last_observation": obs,
         }
 
     # Parse SQL and EXPLANATION
@@ -64,7 +76,7 @@ async def sql_agent_node(state: AgentState) -> dict:
     if exp_match:
         sql_explanation = exp_match.group(1).strip()
 
-    print(f"[sql_agent] generated SQL:\n{sql_draft}")
+    logger.info("generated SQL:\n%s", sql_draft)
 
     # ── Human-in-the-Loop: pause and send SQL to the user for review ──
     # interrupt() suspends graph execution until resumed via Command(resume=...)
@@ -81,9 +93,17 @@ async def sql_agent_node(state: AgentState) -> dict:
     approved = approval.get("approved", False)
     edited_sql = approval.get("sql", sql_draft)  # user may edit SQL
     rejection_reason_new = approval.get("reason", "")
+    logger.info("HITL approval=%s edited=%s", approved, edited_sql != sql_draft)
 
     if not approved:
-        # Re-generate with rejection context
+        obs = create_observation(
+            agent_name="sql",
+            status="rejected",
+            summary=f"SQL rejected: {rejection_reason_new}",
+            artifacts={"sql_draft": edited_sql or sql_draft, "sql_explanation": sql_explanation},
+            error=rejection_reason_new,
+        )
+        # Return to planner for re-plan
         return {
             "current_agent": "sql",
             "sql_draft": edited_sql or sql_draft,
@@ -91,7 +111,20 @@ async def sql_agent_node(state: AgentState) -> dict:
             "sql_approved": False,
             "sql_rejection_reason": rejection_reason_new,
             "agent_steps": state.get("agent_steps", []) + ["sql"],
+            "last_observation": obs,
         }
+
+    obs = create_observation(
+        agent_name="sql",
+        status="success",
+        summary=f"SQL approved: {sql_explanation[:50]}...",
+        artifacts={
+            "sql_draft": edited_sql,
+            "sql_explanation": sql_explanation,
+            "sql_approved": True,
+        },
+        error=None,
+    )
 
     return {
         "current_agent": "sql",
@@ -100,14 +133,13 @@ async def sql_agent_node(state: AgentState) -> dict:
         "sql_approved": True,
         "sql_rejection_reason": "",
         "agent_steps": state.get("agent_steps", []) + ["sql"],
+        "last_observation": obs,
     }
 
 
 def route_after_sql(state: AgentState) -> str:
-    """After SQL agent: if approved go to code_executor, else retry sql."""
+    """After SQL agent: if approved go to code_executor, else back to planner."""
     if state.get("sql_approved"):
         return "code_executor"
-    if state.get("error"):
-        return "final_report"
-    # Not approved → loop back to sql_agent to regenerate
-    return "sql"
+    # Not approved or error → back to planner for re-plan
+    return "planner"

@@ -353,6 +353,13 @@ def execute_code(request: CodeExecutionRequest) -> Dict[str, Any]:
     QUEUE_DEPTH += 1
 
     session_id = request.id
+    logger.info(
+        "POST /code session=%s code_len=%d queue=%d",
+        session_id,
+        len(request.code),
+        QUEUE_DEPTH,
+    )
+    logger.debug("code:\n%s", request.code)
     if session_id in SESSION_LOCALS and SESSION_LOCALS[session_id] is not None:
         localvars = SESSION_LOCALS[session_id]
     else:
@@ -373,11 +380,13 @@ def execute_code(request: CodeExecutionRequest) -> Dict[str, Any]:
     except Exception as exc:
         QUEUE_DEPTH -= 1
         SESSION_RUNNING[session_id] = False
+        logger.error("POST /code session=%s failed: %s", session_id, exc)
         return {"error": str(exc), "trace": traceback.format_exc(), "id": session_id}
 
     SESSION_LOCALS[session_id] = localvars
     QUEUE_DEPTH -= 1
     SESSION_RUNNING[session_id] = False
+    logger.info("POST /code session=%s ok", session_id)
     return {"ok": "code executed successfully"}
 
 
@@ -399,6 +408,12 @@ def execute_sql(request: SQLExecutionRequest) -> Dict[str, Any]:
     global QUEUE_DEPTH
     QUEUE_DEPTH += 1
     session_id = request.id
+    logger.info(
+        "POST /sql session=%s result_var=%s sql=%r",
+        session_id,
+        request.result_variable,
+        request.sql[:300] if request.sql else "",
+    )
 
     if session_id not in SESSION_LOCALS or SESSION_LOCALS[session_id] is None:
         SESSION_LOCALS[session_id] = _new_session_locals()
@@ -408,6 +423,7 @@ def execute_sql(request: SQLExecutionRequest) -> Dict[str, Any]:
         df = _duck().execute(request.sql).fetchdf()
     except Exception as exc:
         QUEUE_DEPTH -= 1
+        logger.error("POST /sql session=%s failed: %s", session_id, exc)
         return {
             "error": str(exc),
             "trace": traceback.format_exc(),
@@ -419,6 +435,12 @@ def execute_sql(request: SQLExecutionRequest) -> Dict[str, Any]:
     QUEUE_DEPTH -= 1
     preview_limit = max(0, int(request.preview_limit))
     preview_df = df if preview_limit == 0 else df.head(preview_limit)
+    logger.info(
+        "POST /sql session=%s ok rows=%d columns=%s",
+        session_id,
+        len(df),
+        list(df.columns),
+    )
     return {
         "ok": True,
         "rows": len(df),
@@ -456,6 +478,7 @@ class VariableRetrievalRequest(BaseModel):
 @app.post("/var")
 def get_variable(request: VariableRetrievalRequest) -> Dict[str, Any]:
     session_id = request.id
+    logger.debug("POST /var session=%s name=%s", session_id, request.name)
     if session_id not in SESSION_LOCALS:
         return {"error": "Id not found"}
 

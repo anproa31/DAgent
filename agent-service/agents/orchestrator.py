@@ -8,8 +8,11 @@ from services.schema_service import (
     fetch_schema_payload,
     get_datasources,
 )
+from utils.agent_logger import get_logger
 from utils.llm_client import chat_complete, get_async_client
 from utils.prompts import ORCHESTRATOR_SYSTEM
+
+logger = get_logger("orchestrator")
 
 
 # Regex patterns that strongly indicate a pure retrieval query. These take
@@ -52,10 +55,19 @@ def _quick_classify(query: str) -> str:
 async def orchestrator_node(state: AgentState) -> dict:
     """Analyse the query, fetch schema + datasources, and choose the pipeline.
 
-    Decides between an SQL-first and a Python-first execution path based on
-    the question and the kinds of datasources registered.
+    On re-plan from reflection: uses feedback to adjust pipeline.
+    Tracks replan_count to avoid infinite loops.
     """
-    print(f"[orchestrator] query={state['query'][:80]}")
+    replan_count = state.get("replan_count", 0)
+    reflection_feedback = state.get("reflection_feedback", "")
+    is_replan = replan_count > 0 and bool(reflection_feedback)
+
+    logger.info(
+        "enter query=%r replan=%s count=%d",
+        state["query"][:80],
+        is_replan,
+        replan_count,
+    )
 
     # Schema (markdown) + aggregated semantic context + structured datasource list.
     tables_arg = state.get("tables")
@@ -92,7 +104,7 @@ async def orchestrator_node(state: AgentState) -> dict:
     if quick_intent == "RETRIEVAL":
         # Deterministic short-circuit: obvious lookup queries skip the LLM
         # classifier entirely so the agent doesn't tack on EDA/insight/viz.
-        print("[orchestrator] quick-classified as RETRIEVAL, skipping LLM router")
+        logger.info("quick-classified as RETRIEVAL, skipping LLM router")
     else:
         client = get_async_client(state.get("base_url", ""), state.get("api_key", ""))
         model = state.get("model", "")
@@ -116,7 +128,7 @@ async def orchestrator_node(state: AgentState) -> dict:
         ]
 
         try:
-            raw = await chat_complete(client, model, messages, temperature=0.1)
+            raw = await chat_complete(client, model, messages, temperature=0.1, log_tag="orchestrator")
             match = re.search(r"\{.*\}", raw, re.DOTALL)
             if match:
                 decision = json.loads(match.group())
@@ -124,13 +136,13 @@ async def orchestrator_node(state: AgentState) -> dict:
                 execution_mode = decision.get("execution_mode", execution_mode).lower()
                 pipeline = decision.get("pipeline", pipeline)
         except Exception as exc:
-            print(f"[orchestrator] LLM error, using defaults: {exc}")
+            logger.warning("LLM error, using defaults: %s", exc)
 
         # Strong analytical signals override an LLM "RETRIEVAL" classification
         # (e.g. when the user asks "why are employees leaving?" with a count
         # context, the LLM sometimes returns RETRIEVAL).
         if quick_intent == "ANALYTICAL" and intent != "ANALYTICAL":
-            print("[orchestrator] heuristic forced ANALYTICAL (matched analytical keywords)")
+            logger.info("heuristic forced ANALYTICAL (matched analytical keywords)")
             intent = "ANALYTICAL"
             if pipeline == ["sql"]:
                 pipeline = ["sql", "eda", "insight", "viz"]
@@ -143,9 +155,15 @@ async def orchestrator_node(state: AgentState) -> dict:
     # matches the chosen execution mode.
     pipeline = _normalise_pipeline(pipeline, execution_mode, intent)
 
-    print(
-        f"[orchestrator] intent={intent} mode={execution_mode} pipeline={pipeline}"
-    )
+    # On re-plan: adjust pipeline based on reflection feedback
+    if is_replan:
+        pipeline = _adjust_pipeline_for_reflection(
+            pipeline, reflection_feedback, intent, execution_mode
+        )
+        replan_count += 1
+        logger.info("adjusted pipeline for reflection: %s", pipeline)
+
+    logger.info("exit intent=%s mode=%s pipeline=%s", intent, execution_mode, pipeline)
 
     return {
         "schema_info": schema_info,
@@ -154,6 +172,7 @@ async def orchestrator_node(state: AgentState) -> dict:
         "intent": intent,
         "execution_mode": execution_mode,
         "pipeline": pipeline,
+        "replan_count": replan_count,
         "current_agent": "orchestrator",
         "agent_steps": state.get("agent_steps", []) + ["orchestrator"],
     }
@@ -170,6 +189,41 @@ def _normalise_pipeline(pipeline: list, execution_mode: str, intent: str) -> lis
 
     if intent == "RETRIEVAL":
         return pipeline[:1]
+    return pipeline
+
+
+def _adjust_pipeline_for_reflection(
+    pipeline: list, feedback: str, intent: str, execution_mode: str
+) -> list:
+    """Adjust pipeline based on reflection feedback.
+
+    Parses feedback for missing elements and adds them to the pipeline.
+    """
+    feedback_lower = feedback.lower()
+
+    # Add missing agents based on critique
+    additions = []
+
+    if "eda" in feedback_lower or "exploratory" in feedback_lower or "distribution" in feedback_lower:
+        if "eda" not in pipeline:
+            additions.append("eda")
+
+    if "insight" in feedback_lower or "business" in feedback_lower or "actionable" in feedback_lower:
+        if "insight" not in pipeline:
+            additions.append("insight")
+
+    if "viz" in feedback_lower or "chart" in feedback_lower or "visual" in feedback_lower:
+        if "viz" not in pipeline:
+            additions.append("viz")
+
+    # Merge additions while preserving order
+    for agent in additions:
+        if agent not in pipeline:
+            pipeline.append(agent)
+
+    # Ensure pipeline starts with correct execution mode
+    pipeline = _normalise_pipeline(pipeline, execution_mode, intent)
+
     return pipeline
 
 

@@ -121,11 +121,29 @@ async def _run_graph(run: RunState, initial_input: dict):
                     "current_agent": run.current_agent,
                     "agent_steps": run.agent_steps,
                 }
-                # Include intent classification when orchestrator reports it
-                if node_name == "orchestrator" and isinstance(node_output, dict):
+                # Include intent classification when orchestrator/planner reports it
+                if node_name in ("orchestrator", "planner") and isinstance(node_output, dict):
                     intent = node_output.get("intent", "")
                     if intent:
                         event_data["intent"] = intent
+                    execution_mode = node_output.get("execution_mode", "")
+                    if execution_mode:
+                        event_data["execution_mode"] = execution_mode
+
+                # Emit planner thought events for ReAct transparency
+                if node_name == "planner" and isinstance(node_output, dict):
+                    planner_history = node_output.get("planner_history", [])
+                    if planner_history:
+                        last_step = planner_history[-1]
+                        thought = last_step.get("thought", "")
+                        action = last_step.get("action", "")
+                        step_index = node_output.get("planner_step_index", len(planner_history))
+                        if thought:
+                            await _emit("planner_thought", {
+                                "thought": thought,
+                                "action": action,
+                                "step_index": step_index,
+                            })
 
                 await _emit("agent_update", event_data)
 
@@ -251,6 +269,14 @@ async def start_run(session_id: str, body: StartRunRequest):
         "pipeline": [],
         "current_agent": "",
         "agent_steps": [],
+        # ReAct planner fields
+        "planner_history": [],
+        "last_observation": {},
+        "current_action": "",
+        "planner_step_index": 0,
+        "completed_actions": [],
+        "replan_count": 0,
+        # Legacy fields
         "sql_draft": "",
         "sql_explanation": "",
         "sql_approved": False,

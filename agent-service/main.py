@@ -5,12 +5,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from routers import sessions_router, runs_router, title_router
 
 from database import init_db
+from utils.agent_logger import get_logger, setup_logging
+
+setup_logging()
+logger = get_logger("agent-service")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger.info("Agent service starting")
     await init_db()
     yield
+    logger.info("Agent service shutting down")
 
 
 app = FastAPI(title="Data Analytics Agent Service", version="1.0.0", lifespan=lifespan)
