@@ -7,8 +7,7 @@ import {
   SidebarContent,
   SidebarHeader,
   SidebarRail,
-    useSidebar
-
+  useSidebar,
 } from '@/components/ui/sidebar'
 import { DatabaseConnectionModal } from '@/components/layout/database-connection-modal'
 import { NavGroup } from '@/components/layout/nav-group'
