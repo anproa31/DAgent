@@ -9,7 +9,7 @@ from agents.orchestrator import orchestrator_node
 from agents.planner import planner_node, route_after_planner, create_observation
 from agents.python_agent import python_agent_node
 from agents.reflection_agent import reflection_agent_node, route_after_reflection
-from agents.sql_agent import sql_agent_node
+from agents.sql_agent import sql_agent_node, route_after_sql
 from agents.state import AgentState
 from agents.viz_agent import viz_agent_node
 from utils.agent_logger import get_logger
@@ -54,8 +54,15 @@ def build_graph():
         },
     )
 
-    # SQL HITL loop: sql ↔ code_executor (internal loop), then back to planner
-    builder.add_edge("sql", "code_executor")
+    # SQL HITL loop: conditional routing based on approval
+    builder.add_conditional_edges(
+        "sql",
+        route_after_sql,
+        {
+            "code_executor": "code_executor",  # approved → execute
+            "planner": "planner",  # rejected → re-plan
+        },
+    )
     builder.add_edge("code_executor", "planner")
 
     # All other agents return directly to planner

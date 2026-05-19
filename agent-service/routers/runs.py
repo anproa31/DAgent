@@ -8,6 +8,7 @@ from fastapi.responses import StreamingResponse
 from langgraph.types import Command
 
 from agents.graph import compiled_graph
+from agents.reflection_rl import get_rl_memory
 from database import async_session_maker
 from models.requests import StartRunRequest, ApproveRequest, RejectRequest
 from models.responses import StartRunResponse, ApproveResponse, RejectResponse, RunReportResponse
@@ -31,6 +32,7 @@ class RunState:
         self.current_agent: str = ""
         self.sql_draft: str = ""
         self.sql_explanation: str = ""
+        self.sql_rejection_reason: str = ""
         self.insights: str = ""
         self.agent_steps: list = []
         self.error: str = ""
@@ -208,6 +210,75 @@ async def _run_graph(run: RunState, initial_input: dict):
                         },
                     )
 
+            # ── Check for another interrupt (re-plan may have triggered new SQL) ──
+            # Loop to handle multiple HITL pauses (e.g., reflection re-plan → new SQL)
+            while True:
+                graph_state = compiled_graph.get_state(config)
+                if not graph_state.next:
+                    break  # Graph completed
+
+                # Check if there's a new interrupt
+                interrupt_value = {}
+                for task in graph_state.tasks:
+                    for interrupt_obj in task.interrupts:
+                        interrupt_value = interrupt_obj.value
+                        break
+                    if interrupt_value:
+                        break
+
+                if not interrupt_value:
+                    break  # No interrupt, graph is stuck or done
+
+                # New SQL generated during re-plan — pause for approval again
+                run.sql_draft = interrupt_value.get("sql", run.sql_draft)
+                run.sql_explanation = interrupt_value.get("explanation", "")
+
+                await _emit(
+                    "sql_generated",
+                    {
+                        "sql": run.sql_draft,
+                        "explanation": run.sql_explanation,
+                        "query": run.query,
+                    },
+                )
+
+                # Wait for user to approve or reject
+                await run.approval_event.wait()
+                run.approval_event.clear()
+
+                await _emit(
+                    "thinking",
+                    {
+                        "message": "Resuming analysis after SQL approval...",
+                        "agent": run.current_agent,
+                    },
+                )
+
+                # Resume graph with new approval
+                async for chunk in compiled_graph.astream(
+                    Command(resume=run.approval_data),
+                    config=config,
+                    stream_mode="updates",
+                ):
+                    for node_name, node_output in chunk.items():
+                        if isinstance(node_output, dict):
+                            run.current_agent = node_output.get("current_agent", node_name)
+                            if node_output.get("agent_steps"):
+                                run.agent_steps = node_output["agent_steps"]
+                            if node_output.get("insights"):
+                                run.insights = node_output["insights"]
+                            if node_output.get("report_content"):
+                                run.report_content = node_output["report_content"]
+
+                        await _emit(
+                            "agent_update",
+                            {
+                                "agent": node_name,
+                                "current_agent": run.current_agent,
+                                "agent_steps": run.agent_steps,
+                            },
+                        )
+
         # ── Collect final state ──
         final_state = compiled_graph.get_state(config)
         if final_state and final_state.values:
@@ -348,9 +419,40 @@ async def reject_sql(run_id: str, body: RejectRequest):
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
 
-    run.approval_data = {"approved": False, "reason": body.reason}
+    # Store edited SQL if provided, otherwise keep current draft
+    edited_sql = body.sql if body.sql else run.sql_draft
+    run.approval_data = {"approved": False, "reason": body.reason, "sql": edited_sql}
+    run.sql_draft = edited_sql
+    run.sql_rejection_reason = body.reason
     run.approval_event.set()
     return RejectResponse(success=True)
+
+
+@router.post("/runs/{run_id}/stop")
+async def stop_run(run_id: str):
+    """Stop/cancel a run. Closes the SSE stream and marks the run as stopped."""
+    run = RUN_STATES.get(run_id)
+    if not run:
+        # Run not in memory — may already be completed or never existed
+        # Still return success so client can clean up local state
+        return {"success": True, "already_stopped": True}
+
+    # Mark as done to stop the graph loop
+    run.done = True
+    run.error = "stopped"
+    # Drain any pending approval
+    if run.approval_event.is_set():
+        run.approval_event.clear()
+    run.approval_data = {"approved": False, "reason": "User stopped the run"}
+    run.approval_event.set()
+
+    # Persist stopped state
+    try:
+        await _persist_run_to_db(run)
+    except Exception as pe:
+        print(f"[runs] stop persist error for run {run_id}: {pe}")
+
+    return {"success": True, "already_stopped": False}
 
 
 @router.get("/runs/{run_id}/report", response_model=RunReportResponse)
@@ -381,3 +483,34 @@ async def get_report(run_id: str):
             raise HTTPException(status_code=404, detail="Run not found")
         payload = run_repository.run_row_to_report_payload(row)
         return RunReportResponse(**payload)
+
+
+@router.get("/rl-memory/stats")
+async def get_rl_memory_stats():
+    """Get RL reflection memory statistics for debugging/monitoring."""
+    memory = get_rl_memory()
+    return {
+        "trajectory_count": len(memory.trajectories),
+        "memory": memory.to_dict(),
+    }
+
+
+@router.get("/rl-memory/trajectories")
+async def get_rl_trajectories(limit: int = 20):
+    """Get recent RL trajectories for debugging."""
+    memory = get_rl_memory()
+    trajectories = memory.trajectories[-limit:]
+    return {
+        "trajectories": [
+            {
+                "query_hash": t.query_hash,
+                "intent": t.intent,
+                "pipeline": t.pipeline,
+                "success": t.success,
+                "reward": t.reward,
+                "critic_feedback": t.critic_feedback[:200] if t.critic_feedback else "",
+                "data_error": t.data_error,
+            }
+            for t in trajectories
+        ]
+    }

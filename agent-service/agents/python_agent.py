@@ -63,11 +63,19 @@ async def python_agent_node(state: AgentState) -> dict:
     if "code_error" in exec_result or "error" in exec_result:
         err = exec_result.get("code_error") or exec_result.get("error")
         logger.error("sandbox execution failed: %s", err)
+
+        # Detect data discovery errors (table/column not found)
+        data_discovery_error = _extract_data_discovery_error(err, python_code)
+
         obs = create_observation(
             agent_name="python",
             status="error",
             summary=f"Python execution failed: {err}",
-            artifacts={"python_code": python_code, "data_summary": ""},
+            artifacts={
+                "python_code": python_code,
+                "data_summary": "",
+                "data_discovery_error": data_discovery_error,
+            },
             error=err,
         )
         return {
@@ -132,6 +140,37 @@ def _build_data_summary(df_var) -> str:
         return "Result available but no table data"
     except Exception as exc:
         return f"Data summary unavailable: {exc}"
+
+
+def _extract_data_discovery_error(error_msg: str, code: str) -> str | None:
+    """Extract data discovery errors from Python execution failures.
+
+    Returns error message if the failure is due to missing table/column.
+    Worker has authority on data availability — critic must accept this.
+    """
+    if not error_msg:
+        return None
+
+    error_lower = error_msg.lower()
+
+    # DuckDB/pandas error patterns for missing objects
+    discovery_patterns = [
+        (r"table.*(?:not found|does not exist|doesn't exist)", "table_not_found"),
+        (r"column.*(?:not found|does not exist|doesn't exist)", "column_not_found"),
+        (r"catalog error", "catalog_error"),
+        (r"unknown table", "unknown_table"),
+        (r"unknown column", "unknown_column"),
+        (r"no schema", "no_schema"),
+        (r"relation.*does not exist", "relation_not_found"),
+        (r"keyerror", "column_not_found"),  # pandas KeyError for missing column
+    ]
+
+    import re
+    for pattern, error_type in discovery_patterns:
+        if re.search(pattern, error_lower):
+            return f"Data discovery error ({error_type}): {error_msg}"
+
+    return None
 
 
 def route_after_python(state: AgentState) -> str:

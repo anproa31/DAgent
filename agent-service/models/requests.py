@@ -20,3 +20,4 @@ class ApproveRequest(BaseModel):
 
 class RejectRequest(BaseModel):
     reason: str = "User rejected the generated SQL"
+    sql: Optional[str] = None  # edited SQL that should be used for regeneration

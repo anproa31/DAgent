@@ -29,11 +29,19 @@ async def code_executor_node(state: AgentState) -> dict:
     if "code_error" in result or "error" in result:
         err = result.get("code_error") or result.get("error")
         logger.error("SQL execution failed: %s", err)
+
+        # Detect data discovery errors (table/column not found)
+        data_discovery_error = _extract_data_discovery_error(err, sql)
+
         obs = create_observation(
             agent_name="code_executor",
             status="error",
             summary=f"SQL execution failed: {err}",
-            artifacts={"data_summary": f"Error: {err}", "result_var_names": []},
+            artifacts={
+                "data_summary": f"Error: {err}",
+                "result_var_names": [],
+                "data_discovery_error": data_discovery_error,
+            },
             error=err,
         )
         return {
@@ -88,6 +96,35 @@ def _build_data_summary(columns: List[str], row_count: int, preview: List[Dict[s
         f"Preview ({min(5, row_count)} rows):\n"
         f"{header}\n" + "\n".join(preview_lines)
     )
+
+
+def _extract_data_discovery_error(error_msg: str, sql: str) -> str | None:
+    """Extract data discovery errors from SQL execution failures.
+
+    Returns error message if the failure is due to missing table/column.
+    Worker has authority on data availability — critic must accept this.
+    """
+    if not error_msg:
+        return None
+
+    error_lower = error_msg.lower()
+
+    # DuckDB error patterns for missing objects
+    discovery_patterns = [
+        (r"table.*(?:not found|does not exist|doesn't exist)", "table_not_found"),
+        (r"column.*(?:not found|does not exist|doesn't exist)", "column_not_found"),
+        (r"catalog error", "catalog_error"),
+        (r"unknown table", "unknown_table"),
+        (r"unknown column", "unknown_column"),
+        (r"no schema", "no_schema"),
+    ]
+
+    import re
+    for pattern, error_type in discovery_patterns:
+        if re.search(pattern, error_lower):
+            return f"Data discovery error ({error_type}): {error_msg}"
+
+    return None
 
 
 def route_after_code_executor(state: AgentState) -> str:

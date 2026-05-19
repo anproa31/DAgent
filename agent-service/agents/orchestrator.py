@@ -11,6 +11,7 @@ from services.schema_service import (
 from utils.agent_logger import get_logger
 from utils.llm_client import chat_complete, get_async_client
 from utils.prompts import ORCHESTRATOR_SYSTEM
+from agents.reflection_rl import get_policy_suggestion
 
 logger = get_logger("orchestrator")
 
@@ -100,6 +101,16 @@ async def orchestrator_node(state: AgentState) -> dict:
     intent = "RETRIEVAL"  # safer default than ANALYTICAL — fewer side-quests
     pipeline = ["sql"]
     execution_mode = "sql"
+
+    # Check RL memory for historically successful pipelines (before LLM classification)
+    rl_suggestion = get_policy_suggestion(state.get("query", ""), quick_intent or "RETRIEVAL")
+    if rl_suggestion and rl_suggestion.get("confidence", 0) > 0.7:
+        # High-confidence suggestion from RL memory — use it directly
+        suggested_pipeline = rl_suggestion.get("pipeline", [])
+        logger.info("RL suggestion (high confidence): %s", suggested_pipeline)
+        pipeline = suggested_pipeline
+        execution_mode = "python" if "python" in pipeline else "sql"
+        intent = quick_intent or rl_suggestion.get("intent", intent)
 
     if quick_intent == "RETRIEVAL":
         # Deterministic short-circuit: obvious lookup queries skip the LLM
