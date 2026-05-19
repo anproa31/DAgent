@@ -1,13 +1,16 @@
 from agents.state import AgentState
 from services.code_runner import get_variable_results
+from utils.agent_logger import get_logger
 from utils.llm_client import get_async_client, chat_complete
 from utils.prompts import RETRIEVAL_RESPONSE_SYSTEM
+
+logger = get_logger("final_report")
 
 
 async def final_report_node(state: AgentState) -> dict:
     """Compile all agent outputs into a structured report content list."""
     intent = state.get("intent", "ANALYTICAL")
-    print(f"[final_report] compiling report (intent={intent})")
+    logger.info("enter intent=%s", intent)
 
     session_id = state.get("session_id", state.get("run_id", "default"))
     content = []
@@ -22,6 +25,7 @@ async def final_report_node(state: AgentState) -> dict:
     else:
         content = await _build_analytical_report(state, session_id)
 
+    logger.info("exit sections=%d", len(content))
     return {
         "report_content": content,
         "done": True,
@@ -64,10 +68,11 @@ async def _build_retrieval_report(state: AgentState, session_id: str) -> list:
                 client, model,
                 [{"role": "system", "content": prompt}, {"role": "user", "content": state.get("query", "")}],
                 temperature=0.1,
+                log_tag="final_report",
             )
             content.append({"type": "markdown", "content": response_text})
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("retrieval response LLM failed: %s", exc)
 
     return content
 

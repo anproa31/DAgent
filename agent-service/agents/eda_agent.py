@@ -1,11 +1,15 @@
 from agents.state import AgentState
+from agents.planner import create_observation
+from utils.agent_logger import get_logger
 from utils.llm_client import get_async_client, chat_complete
 from utils.prompts import EDA_AGENT_SYSTEM, format_semantic_context_for_prompt
+
+logger = get_logger("eda_agent")
 
 
 async def eda_agent_node(state: AgentState) -> dict:
     """Perform exploratory data analysis on the retrieved data."""
-    print("[eda_agent] running EDA")
+    logger.info("enter")
 
     data_summary = state.get("data_summary", "No data available")
     schema = state.get("schema_info", "")
@@ -25,14 +29,31 @@ async def eda_agent_node(state: AgentState) -> dict:
     ]
 
     try:
-        eda_summary = await chat_complete(client, model, messages, temperature=0.3)
+        eda_summary = await chat_complete(client, model, messages, temperature=0.3, log_tag="eda_agent")
+        logger.info("exit success (%d chars)", len(eda_summary))
+        obs = create_observation(
+            agent_name="eda",
+            status="success",
+            summary=f"EDA completed: {eda_summary[:100]}...",
+            artifacts={"eda_summary": eda_summary},
+            error=None,
+        )
     except Exception as e:
+        logger.error("LLM error: %s", e)
         eda_summary = f"EDA analysis unavailable: {e}"
+        obs = create_observation(
+            agent_name="eda",
+            status="error",
+            summary=f"EDA failed: {e}",
+            artifacts={"eda_summary": ""},
+            error=str(e),
+        )
 
     return {
         "current_agent": "eda",
         "eda_summary": eda_summary,
         "agent_steps": state.get("agent_steps", []) + ["eda"],
+        "last_observation": obs,
     }
 
 

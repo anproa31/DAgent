@@ -1,4 +1,12 @@
-from typing import Any, Dict, List, TypedDict
+from typing import Any, Dict, List, TypedDict, Optional
+
+
+class PlannerStep(TypedDict, total=False):
+    """Single ReAct planner step."""
+    thought: str
+    action: str
+    action_input: Dict[str, Any]
+    observation: Dict[str, Any]
 
 
 class AgentState(TypedDict, total=False):
@@ -18,12 +26,21 @@ class AgentState(TypedDict, total=False):
     enhanced_context: str  # query-focused semantic context from context-engine /enhance (or fallback)
     datasources: List[Dict[str, Any]]  # structured list from /internal/datasources
 
-    # Orchestrator decision
+    # Planner decision (ReAct)
     intent: str  # "RETRIEVAL" or "ANALYTICAL"
-    pipeline: List[str]  # e.g. ["sql", "eda", "insight", "viz"]
-    execution_mode: str  # "sql" | "python" — chosen by orchestrator
+    execution_mode: str  # "sql" | "python" — chosen by planner
     current_agent: str
     agent_steps: List[str]
+
+    # ReAct planner state
+    planner_history: List[PlannerStep]  # ordered trace of thought/action/observation
+    last_observation: Dict[str, Any]  # structured summary of most recent agent run
+    current_action: str  # action chosen for current step
+    planner_step_index: int  # current step count
+    completed_actions: List[str]  # actions already executed in this run
+
+    # Legacy pipeline (kept for backward compat, not used for routing)
+    pipeline: List[str]
 
     # SQL Agent outputs
     sql_draft: str
@@ -50,6 +67,12 @@ class AgentState(TypedDict, total=False):
 
     # Final compiled report
     report_content: List[Any]
+
+    # Reflection quality gate
+    reflection_passed: bool
+    reflection_feedback: str
+    reflection_replan_reason: str
+    replan_count: int
 
     # Control
     done: bool

@@ -1,11 +1,15 @@
 from agents.state import AgentState
+from agents.planner import create_observation
+from utils.agent_logger import get_logger
 from utils.llm_client import get_async_client, chat_complete
 from utils.prompts import INSIGHT_AGENT_SYSTEM, format_semantic_context_for_prompt
+
+logger = get_logger("insight_agent")
 
 
 async def insight_agent_node(state: AgentState) -> dict:
     """Generate business insights from data and EDA findings."""
-    print("[insight_agent] generating insights")
+    logger.info("enter")
 
     client = get_async_client(state.get("base_url", ""), state.get("api_key", ""))
     model = state.get("model", "")
@@ -25,14 +29,31 @@ async def insight_agent_node(state: AgentState) -> dict:
     ]
 
     try:
-        insights = await chat_complete(client, model, messages, temperature=0.4)
+        insights = await chat_complete(client, model, messages, temperature=0.4, log_tag="insight_agent")
+        logger.info("exit success (%d chars)", len(insights))
+        obs = create_observation(
+            agent_name="insight",
+            status="success",
+            summary=f"Generated {insights.count('**')} insights",
+            artifacts={"insights": insights},
+            error=None,
+        )
     except Exception as e:
+        logger.error("LLM error: %s", e)
         insights = f"Insight generation failed: {e}"
+        obs = create_observation(
+            agent_name="insight",
+            status="error",
+            summary=f"Insight generation failed: {e}",
+            artifacts={"insights": ""},
+            error=str(e),
+        )
 
     return {
         "current_agent": "insight",
         "insights": insights,
         "agent_steps": state.get("agent_steps", []) + ["insight"],
+        "last_observation": obs,
     }
 
 

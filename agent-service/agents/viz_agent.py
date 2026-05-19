@@ -1,13 +1,17 @@
 import re
 from agents.state import AgentState
+from agents.planner import create_observation
+from utils.agent_logger import get_logger
 from utils.llm_client import get_async_client, chat_complete
 from utils.prompts import VIZ_AGENT_SYSTEM, format_semantic_context_for_prompt
 from services.code_runner import execute_code, get_variable_results
 
+logger = get_logger("viz_agent")
+
 
 async def viz_agent_node(state: AgentState) -> dict:
     """Generate visualization code, execute it, and capture chart outputs."""
-    print("[viz_agent] generating visualizations")
+    logger.info("enter")
 
     client = get_async_client(state.get("base_url", ""), state.get("api_key", ""))
     model = state.get("model", "")
@@ -32,13 +36,22 @@ async def viz_agent_node(state: AgentState) -> dict:
     ]
 
     try:
-        raw = await chat_complete(client, model, messages, temperature=0.3)
+        raw = await chat_complete(client, model, messages, temperature=0.3, log_tag="viz_agent")
     except Exception as e:
+        logger.error("LLM error: %s", e)
+        obs = create_observation(
+            agent_name="viz",
+            status="error",
+            summary=f"Viz code generation failed: {e}",
+            artifacts={"viz_code": "", "viz_var_names": []},
+            error=str(e),
+        )
         return {
             "current_agent": "viz",
             "viz_code": "",
             "viz_var_names": [],
             "agent_steps": state.get("agent_steps", []) + ["viz"],
+            "last_observation": obs,
         }
 
     # Extract code from <python>...</python> tags or markdown code blocks
@@ -56,21 +69,32 @@ async def viz_agent_node(state: AgentState) -> dict:
     var_names = re.findall(r"\b(?!figsize\b)(fig\w*|figure\w*)\s*(?:,|\s*=)", viz_code)
     var_names = list(dict.fromkeys(var_names))  # deduplicate while preserving order
 
-    # Debug: log generated code
-    print(f"[viz_agent] generated code:\n{viz_code}")
+    logger.info("generated code (%d chars), vars=%s", len(viz_code), var_names)
+    logger.debug("viz code:\n%s", viz_code)
 
     # Execute visualization code in sandbox
     session_id = state.get("session_id", state.get("run_id", "default"))
+    status = "success"
     if viz_code:
         exec_result = await execute_code(viz_code, session_id)
         if "code_error" in exec_result or "error" in exec_result:
             err = exec_result.get("code_error") or exec_result.get("error")
-            print(f"[viz_agent] visualization code error: {err}")
+            logger.error("visualization code error: %s", err)
             var_names = []
+            status = "error"
+
+    obs = create_observation(
+        agent_name="viz",
+        status=status,
+        summary=f"Generated {len(var_names)} chart(s)" if status == "success" else f"Viz execution failed",
+        artifacts={"viz_code": viz_code, "viz_var_names": var_names},
+        error=None if status == "success" else exec_result.get("code_error") if viz_code else None,
+    )
 
     return {
         "current_agent": "viz",
         "viz_code": viz_code,
         "viz_var_names": var_names,
         "agent_steps": state.get("agent_steps", []) + ["viz"],
+        "last_observation": obs,
     }

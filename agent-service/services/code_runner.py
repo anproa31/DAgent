@@ -6,11 +6,16 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
+from utils.agent_logger import get_logger
+
+logger = get_logger("code_runner")
+
 CODE_RUNNER_URL = os.getenv("CODE_RUNNER_URL", "http://sandbox:8001/").rstrip("/")
 
 
 async def execute_code(python_code: str, session_id: str) -> Dict[str, Any]:
     """Execute Python code in the sandbox and return results."""
+    logger.info("execute_code session=%s code_len=%d", session_id, len(python_code))
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
@@ -23,9 +28,12 @@ async def execute_code(python_code: str, session_id: str) -> Dict[str, Any]:
             response.raise_for_status()
             result = response.json()
             if "error" in result:
+                logger.error("execute_code session=%s error: %s", session_id, result["error"])
                 return {"code_error": result["error"]}
+            logger.info("execute_code session=%s ok", session_id)
             return {"ok": True}
     except Exception as exc:
+        logger.error("execute_code session=%s request failed: %s", session_id, exc)
         return {"error": str(exc)}
 
 
@@ -40,6 +48,7 @@ async def execute_sql(
     ``result_variable`` in the session, so visualisation/insight agents
     can reference it later by name.
     """
+    logger.info("execute_sql session=%s var=%s sql=%r", session_id, result_variable, sql[:200] if sql else "")
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
@@ -53,7 +62,14 @@ async def execute_sql(
             response.raise_for_status()
             result = response.json()
             if "error" in result:
+                logger.error("execute_sql session=%s error: %s", session_id, result["error"])
                 return {"code_error": result["error"], "sql": sql}
+            logger.info(
+                "execute_sql session=%s ok rows=%d columns=%d",
+                session_id,
+                result.get("rows", 0),
+                len(result.get("columns", [])),
+            )
             return {
                 "ok": True,
                 "rows": result.get("rows", 0),
@@ -62,6 +78,7 @@ async def execute_sql(
                 "result_variable": result.get("result_variable", result_variable),
             }
     except Exception as exc:
+        logger.error("execute_sql session=%s request failed: %s", session_id, exc)
         return {"error": str(exc)}
 
 
@@ -77,7 +94,7 @@ async def get_variable(session_id: str, var_name: str) -> Optional[Dict[str, Any
                 return None
             return response.json()
     except Exception as exc:
-        print(f"[code_runner] get_variable failed: {exc}")
+        logger.warning("get_variable session=%s name=%s failed: %s", session_id, var_name, exc)
         return None
 
 

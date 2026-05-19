@@ -11,7 +11,11 @@ import json
 from typing import Any, Dict, List
 
 from agents.state import AgentState
+from agents.planner import create_observation
 from services.code_runner import execute_sql, get_variable
+from utils.agent_logger import get_logger
+
+logger = get_logger("code_executor")
 
 
 async def code_executor_node(state: AgentState) -> dict:
@@ -19,17 +23,26 @@ async def code_executor_node(state: AgentState) -> dict:
     sql = state.get("sql_draft", "")
     session_id = state.get("session_id", state.get("run_id", "default"))
 
-    print(f"[code_executor] executing SQL in sandbox, session={session_id}")
+    logger.info("enter session=%s sql=%r", session_id, sql[:200] if sql else "")
 
     result = await execute_sql(sql, session_id, result_variable="df_result")
     if "code_error" in result or "error" in result:
         err = result.get("code_error") or result.get("error")
+        logger.error("SQL execution failed: %s", err)
+        obs = create_observation(
+            agent_name="code_executor",
+            status="error",
+            summary=f"SQL execution failed: {err}",
+            artifacts={"data_summary": f"Error: {err}", "result_var_names": []},
+            error=err,
+        )
         return {
             "current_agent": "code_executor",
             "data_summary": f"Execution error: {err}",
             "result_var_names": [],
             "agent_steps": state.get("agent_steps", []) + ["code_executor"],
             "error": f"Code execution error: {err}",
+            "last_observation": obs,
         }
 
     columns: List[str] = result.get("columns", [])
@@ -37,12 +50,26 @@ async def code_executor_node(state: AgentState) -> dict:
     preview: List[Dict[str, Any]] = result.get("preview", [])
 
     data_summary = _build_data_summary(columns, rows, preview)
+    logger.info("exit rows=%d columns=%d", rows, len(columns))
+
+    obs = create_observation(
+        agent_name="code_executor",
+        status="success",
+        summary=f"Executed SQL: {rows} rows, {len(columns)} columns",
+        artifacts={
+            "data_summary": data_summary,
+            "result_var_names": ["df_result"],
+            "sql_draft": sql,
+        },
+        error=None,
+    )
 
     return {
         "current_agent": "code_executor",
         "data_summary": data_summary,
         "result_var_names": ["df_result"],
         "agent_steps": state.get("agent_steps", []) + ["code_executor"],
+        "last_observation": obs,
     }
 
 
