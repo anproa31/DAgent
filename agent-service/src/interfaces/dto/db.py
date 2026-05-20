@@ -55,6 +55,9 @@ class AgentRun(Base):
     insights: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     report_content: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     agent_steps: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    # Streaming artifacts replayed on reload (real-time thinking + execution cards).
+    thinking_segments: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    executions: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

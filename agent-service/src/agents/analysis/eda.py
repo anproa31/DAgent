@@ -1,5 +1,6 @@
 from agents.shared.observations import create_observation
 from agents.shared.state import AgentState
+from orchestration.streaming import make_delta_emitter
 from utils.agent_logger import get_logger
 from utils.llm_client import get_async_client, chat_complete
 from utils.prompts import EDA_AGENT_SYSTEM, format_semantic_context_for_prompt
@@ -28,7 +29,14 @@ async def eda_agent_node(state: AgentState) -> dict:
     ]
 
     try:
-        eda_summary = await chat_complete(client, model, messages, temperature=0.3, log_tag="eda_agent")
+        eda_summary = await chat_complete(
+            client,
+            model,
+            messages,
+            temperature=0.3,
+            log_tag="eda_agent",
+            on_delta=make_delta_emitter(state.get("run_id", ""), "eda"),
+        )
         logger.info("exit success (%d chars)", len(eda_summary))
         obs = create_observation(
             agent_name="eda",

@@ -1,6 +1,6 @@
 import os
 import openai
-from typing import Optional
+from typing import Awaitable, Callable, Optional
 
 from utils.agent_logger import get_logger, truncate
 
@@ -31,22 +31,56 @@ async def chat_complete(
     temperature: float = 0.2,
     stream: bool = False,
     log_tag: str = "llm",
+    on_delta: Optional[Callable[[str], Awaitable[None]]] = None,
 ) -> str:
-    """Helper: non-streaming chat completion, returns content string."""
+    """Helper: chat completion, returns the full content string.
+
+    When ``on_delta`` is provided the request is streamed and each token delta is
+    forwarded to the callback (used to stream the model's reasoning/generation to
+    the SSE ``thinking_chunk`` channel); the assembled content is still returned.
+    """
     roles = [m.get("role", "?") for m in messages]
     last_user = next(
         (m.get("content", "") for m in reversed(messages) if m.get("role") == "user"),
         "",
     )
     logger.info(
-        "[%s] request model=%s temperature=%s messages=%d roles=%s",
+        "[%s] request model=%s temperature=%s messages=%d roles=%s stream=%s",
         log_tag,
         model,
         temperature,
         len(messages),
         roles,
+        bool(on_delta) or stream,
     )
     logger.debug("[%s] last user message: %s", log_tag, truncate(last_user, 800))
+
+    if on_delta is not None:
+        parts: list[str] = []
+        response_stream = await client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            stream=True,
+        )
+        async for chunk in response_stream:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta.content or ""
+            if delta:
+                parts.append(delta)
+                try:
+                    await on_delta(delta)
+                except Exception as cb_exc:  # never let a UI sink break generation
+                    logger.warning("[%s] on_delta callback error: %s", log_tag, cb_exc)
+        content = "".join(parts)
+        logger.info(
+            "[%s] streamed response (%d chars): %s",
+            log_tag,
+            len(content),
+            truncate(content, int(os.getenv("LOG_LLM_RESPONSE_MAX", "4000"))),
+        )
+        return content
 
     response = await client.chat.completions.create(
         model=model,

@@ -1,9 +1,32 @@
-import type { HTMLAttributes } from 'react'
+import type { HTMLAttributes, ReactNode } from 'react'
 import { memo } from 'react'
 import ReactMarkdown, { type Options } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { cn } from '@/lib/utils'
 import { SimpleCodeBlock } from '@/components/shared/code-block/simple-code-block'
+
+const IMPACT_LEVEL_PATTERN = /\*\*\[Impact Level:[^\]]+\]\*\*/i
+
+function extractTextFromChildren(children: ReactNode): string {
+  if (typeof children === 'string') return children
+  if (typeof children === 'number') return String(children)
+  if (Array.isArray(children)) {
+    return children.map(extractTextFromChildren).join('')
+  }
+  if (children && typeof children === 'object' && 'props' in children) {
+    return extractTextFromChildren(
+      (children as { props: { children?: ReactNode } }).props.children
+    )
+  }
+  return ''
+}
+
+function normalizeImpactLevelSpacing(markdown: string): string {
+  return markdown.replace(
+    /(^|\n)(\*\*\[Impact Level:[^\]]+\]\*\*)/gi,
+    (_match, prefix, marker) => `${prefix === '' ? '' : '\n'}\n\n${marker}`
+  )
+}
 
 export type AIResponseProps = HTMLAttributes<HTMLDivElement> & {
   options?: Options
@@ -57,6 +80,24 @@ const components: Options['components'] = {
       {children}
     </ul>
   ),
+  p: ({ node, children, className, ...props }) => {
+    const isImpactLevel = IMPACT_LEVEL_PATTERN.test(
+      extractTextFromChildren(children)
+    )
+
+    return (
+      <p
+        className={cn(
+          'leading-relaxed',
+          isImpactLevel ? 'not-first:mt-6 mb-1' : 'mb-4',
+          className
+        )}
+        {...props}
+      >
+        {children}
+      </p>
+    )
+  },
   strong: ({ node, children, className, ...props }) => (
     <span className={cn('font-semibold', className)} {...props}>
       {children}
@@ -137,22 +178,29 @@ const components: Options['components'] = {
   },
 }
 export const AIResponse = memo(
-  ({ className, options, children, ...props }: AIResponseProps) => (
-    <div
-      className={cn(
-        'size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0',
-        className
-      )}
-      {...props}
-    >
-      <ReactMarkdown
-        components={components}
-        remarkPlugins={[remarkGfm]}
-        {...options}
+  ({ className, options, children, ...props }: AIResponseProps) => {
+    const markdown =
+      typeof children === 'string'
+        ? normalizeImpactLevelSpacing(children)
+        : children
+
+    return (
+      <div
+        className={cn(
+          'size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0',
+          className
+        )}
+        {...props}
       >
-        {children}
-      </ReactMarkdown>
-    </div>
-  ),
+        <ReactMarkdown
+          components={components}
+          remarkPlugins={[remarkGfm]}
+          {...options}
+        >
+          {markdown}
+        </ReactMarkdown>
+      </div>
+    )
+  },
   (prevProps, nextProps) => prevProps.children === nextProps.children
 )

@@ -15,10 +15,12 @@ from orchestration.routing.plan import (
 )
 
 # Map worker observation agent names back to planner actions.
+# sql / python / code_executor all fulfil the generic ``exec`` plan step.
 _OBSERVATION_TO_ACTION = {
-    "sql": "sql",
-    "code_executor": "sql",
-    "python": "python",
+    "exec": "exec",
+    "sql": "exec",
+    "code_executor": "exec",
+    "python": "exec",
     "web_discover": "discover_data",
     "eda": "eda",
     "insight": "insight",
@@ -114,6 +116,13 @@ def resolve_planner_action(
 
     if _should_allow_error_override(last_observation, llm_action):
         return llm_action, "error recovery override"
+
+    # Block re-running already-completed worker actions (DB-GPT task_progress pattern).
+    # Error recovery is exempt (checked above); terminal actions are also exempt.
+    completed = state.get("completed_actions") or []
+    if llm_action in completed and llm_action not in ("generate_result", "finish"):
+        forced = next_planned or "generate_result"
+        return forced, f"'{llm_action}' already done — advancing to '{forced}'"
 
     if llm_action in ("generate_result", "finish") and _all_workers_done(plan):
         return llm_action, "all worker steps complete"

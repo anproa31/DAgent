@@ -1,10 +1,31 @@
 from agents.shared.state import AgentState
 from infrastructure.sandbox.code_runner import get_variable_results
+from orchestration.streaming import make_delta_emitter
 from utils.agent_logger import get_logger
 from utils.llm_client import get_async_client, chat_complete
 from utils.prompts import RETRIEVAL_RESPONSE_SYSTEM
 
+
+def _python_code_block(state: AgentState) -> dict | None:
+    """Fenced Python block for the final report (mirrors how SQL is shown)."""
+    code = (state.get("python_code") or "").strip()
+    if not code:
+        return None
+    return {"type": "markdown", "content": f"## Analysis Code\n```python\n{code}\n```"}
+
 logger = get_logger("final_report")
+
+
+def _has_reportable_content(state: AgentState) -> bool:
+    """True when we can build a substantive report despite an upstream worker error."""
+    if state.get("insights") or state.get("eda_summary"):
+        return True
+    if state.get("result_var_names") or state.get("viz_var_names"):
+        return True
+    if state.get("sql_draft") or state.get("python_code"):
+        return True
+    data_summary = state.get("data_summary", "")
+    return bool(data_summary and data_summary != "No data returned")
 
 
 async def final_report_node(state: AgentState) -> dict:
@@ -14,7 +35,7 @@ async def final_report_node(state: AgentState) -> dict:
     session_id = state.get("session_id", state.get("run_id", "default"))
     content = []
 
-    if state.get("error") and not state.get("insights"):
+    if state.get("error") and not _has_reportable_content(state):
         content.append({"type": "markdown", "content": f"**Error:** {state['error']}"})
         return {"report_content": content, "done": True, "current_agent": "final_report"}
 
@@ -39,6 +60,10 @@ async def _build_retrieval_report(state: AgentState, session_id: str) -> list:
     if sql:
         content.append({"type": "markdown", "content": f"```sql\n{sql}\n```"})
 
+    python_block = _python_code_block(state)
+    if python_block:
+        content.append(python_block)
+
     result_vars = state.get("result_var_names", [])
     if result_vars:
         data_content = await get_variable_results(session_id, result_vars)
@@ -59,6 +84,7 @@ async def _build_retrieval_report(state: AgentState, session_id: str) -> list:
                 [{"role": "system", "content": prompt}, {"role": "user", "content": state.get("query", "")}],
                 temperature=0.1,
                 log_tag="final_report",
+                on_delta=make_delta_emitter(state.get("run_id", ""), "final_report"),
             )
             content.append({"type": "markdown", "content": response_text})
         except Exception as exc:
@@ -81,6 +107,10 @@ async def _build_analytical_report(state: AgentState, session_id: str) -> list:
                 ),
             }
         )
+
+    python_block = _python_code_block(state)
+    if python_block:
+        content.append(python_block)
 
     result_vars = state.get("result_var_names", [])
     if result_vars:

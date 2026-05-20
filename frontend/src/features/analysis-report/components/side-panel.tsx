@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
-import { Download, X, Copy } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Download, X, Copy, Loader2, Terminal } from 'lucide-react'
 import { toast } from 'sonner'
 import * as XLSX from 'xlsx'
 import { type ActionStep } from '@/hooks/use-analysis'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { AIResponse } from '@/components/shared/kibo-ui/response'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -15,11 +16,21 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { useAgentStore } from '@/stores/agentStore'
+
+export type SidePanelContent =
+  | { type: 'code'; content: string }
+  | { type: 'table'; content: string }
+  | { type: 'step'; content: string; stepData?: ActionStep }
+  | { type: 'thinking'; runId: string }
+  | { type: 'execution'; runId: string; executionId: string }
 
 interface SidePanelProps {
-  type: 'code' | 'table' | 'step'
+  type: 'code' | 'table' | 'step' | 'thinking' | 'execution'
   content: string
   stepData?: ActionStep
+  runId?: string
+  executionId?: string
   onClose: () => void
   inSplitView?: boolean
 }
@@ -28,6 +39,8 @@ export function SidePanel({
   type,
   content,
   stepData,
+  runId,
+  executionId,
   onClose,
 }: SidePanelProps) {
   // Split view mode: render directly without using Sheet
@@ -43,7 +56,187 @@ export function SidePanel({
     return <StepPanelContent stepData={stepData} onClose={onClose} />
   }
 
+  if (type === 'thinking' && runId) {
+    return <ThinkingPanelContent runId={runId} onClose={onClose} />
+  }
+
+  if (type === 'execution' && runId && executionId) {
+    return (
+      <ExecutionPanelContent
+        runId={runId}
+        executionId={executionId}
+        onClose={onClose}
+      />
+    )
+  }
+
   return null
+}
+
+const AGENT_LABELS: Record<string, string> = {
+  planner: 'Reasoning',
+  sql: 'SQL generation',
+  python: 'Python generation',
+  eda: 'Exploratory analysis',
+  insight: 'Insights',
+  final_report: 'Report',
+}
+
+function agentLabel(agent: string): string {
+  return AGENT_LABELS[agent] ?? agent.replace(/_/g, ' ')
+}
+
+// Live, token-by-token reasoning/generation transcript for a run.
+function ThinkingPanelContent({
+  runId,
+  onClose,
+}: {
+  runId: string
+  onClose: () => void
+}) {
+  const run = useAgentStore((s) => s.runs.find((r) => r.runId === runId))
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const segments = run?.thinkingSegments ?? []
+  const isActive =
+    !!run &&
+    run.phase !== 'done' &&
+    run.phase !== 'error' &&
+    run.phase !== 'stopped'
+
+  // Follow the stream: keep the latest tokens in view while thinking is active.
+  const lastText = segments.length ? segments[segments.length - 1].text : ''
+  useEffect(() => {
+    if (isActive && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [lastText, segments.length, isActive])
+
+  return (
+    <div className='flex h-full min-h-0 w-full min-w-0 flex-col bg-background'>
+      <div className='flex shrink-0 items-center justify-between gap-3 border-b bg-muted/50 px-4 py-3'>
+        <span className='flex min-w-0 items-center gap-2 truncate text-sm font-semibold text-foreground'>
+          Thinking
+          {isActive && (
+            <Loader2 className='h-3.5 w-3.5 animate-spin text-primary' />
+          )}
+        </span>
+        <Button onClick={onClose} variant='outline' size='sm' className='h-8 shrink-0 gap-1.5'>
+          <X className='h-4 w-4' />
+          Close
+        </Button>
+      </div>
+
+      <div ref={scrollRef} className='min-h-0 flex-1 overflow-auto px-4 py-3'>
+        {segments.length === 0 ? (
+          <p className='text-sm text-muted-foreground'>
+            {isActive ? 'Waiting for the model to start thinking…' : 'No reasoning recorded.'}
+          </p>
+        ) : (
+          <div className='space-y-4'>
+            {segments.map((seg) => (
+              <div key={seg.id} className='space-y-1'>
+                <span className='text-[11px] font-medium uppercase tracking-wide text-muted-foreground'>
+                  {agentLabel(seg.agent)}
+                </span>
+                <div className='text-sm leading-relaxed'>
+                  <AIResponse>{seg.text}</AIResponse>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// SQL/Python code + sandbox execution log for a single executed step.
+function ExecutionPanelContent({
+  runId,
+  executionId,
+  onClose,
+}: {
+  runId: string
+  executionId: string
+  onClose: () => void
+}) {
+  const run = useAgentStore((s) => s.runs.find((r) => r.runId === runId))
+  const execution = run?.executions.find((e) => e.id === executionId)
+
+  if (!execution) return null
+
+  const language = execution.kind === 'sql' ? 'SQL' : 'Python'
+
+  const copyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(execution.code)
+      toast.success('Code copied to clipboard')
+    } catch {
+      toast.error('Failed to copy to clipboard')
+    }
+  }
+
+  return (
+    <div className='flex h-full min-h-0 w-full min-w-0 flex-col bg-background'>
+      <div className='flex shrink-0 items-center justify-between gap-3 border-b bg-muted/50 px-4 py-3'>
+        <span className='flex min-w-0 items-center gap-2 truncate text-sm font-semibold text-foreground'>
+          {language} execution
+          <Badge
+            variant={execution.status === 'error' ? 'destructive' : 'secondary'}
+            className='text-[10px] uppercase'
+          >
+            {execution.status}
+          </Badge>
+        </span>
+        <div className='flex shrink-0 items-center gap-2'>
+          <Button onClick={copyCode} variant='outline' size='sm' className='h-8'>
+            <Copy className='mr-1.5 h-4 w-4' />
+            Copy
+          </Button>
+          <Button onClick={onClose} variant='outline' size='sm' className='h-8 gap-1.5'>
+            <X className='h-4 w-4' />
+            Close
+          </Button>
+        </div>
+      </div>
+
+      <ScrollArea className='min-h-0 flex-1'>
+        <div className='space-y-4 px-4 py-3'>
+          <div>
+            <h3 className='text-muted-foreground mb-2 text-sm font-medium'>
+              {language} code
+            </h3>
+            <pre className='bg-muted overflow-x-auto rounded-lg p-4 font-mono text-sm whitespace-pre-wrap'>
+              <code>{execution.code || '(no code)'}</code>
+            </pre>
+          </div>
+
+          {execution.error && (
+            <div className='rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive'>
+              {execution.error}
+            </div>
+          )}
+
+          <div>
+            <h3 className='text-muted-foreground mb-2 flex items-center gap-1.5 text-sm font-medium'>
+              <Terminal className='h-4 w-4' />
+              Execution log
+              {(execution.rows > 0 || execution.columns.length > 0) && (
+                <span className='font-normal text-muted-foreground'>
+                  ({execution.rows} rows &times; {execution.columns.length} columns)
+                </span>
+              )}
+            </h3>
+            <div className='rounded-md bg-zinc-950 dark:bg-zinc-900 p-3 overflow-x-auto'>
+              <pre className='font-mono text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed'>
+                {execution.log || 'No output.'}
+              </pre>
+            </div>
+          </div>
+        </div>
+      </ScrollArea>
+    </div>
+  )
 }
 
 // Code panel for split view

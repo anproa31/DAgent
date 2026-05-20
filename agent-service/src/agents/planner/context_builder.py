@@ -62,8 +62,28 @@ def format_failed_attempts(observations: List[Dict[str, Any]]) -> str:
     return "## Failed attempts (do not retry the same way)\n" + "\n".join(lines)
 
 
+def format_task_progress(completed_actions: list, execution_plan: list) -> str:
+    """DB-GPT-style task progress injected into the planner prompt.
+
+    Shows ✅ for completed steps and ⏳ for pending ones so the LLM knows
+    which actions have already run and must not be repeated.
+    """
+    if not execution_plan:
+        return ""
+    lines = ["## Task progress (DO NOT re-run ✅ steps):"]
+    for step in execution_plan:
+        action = step.get("action", "")
+        if action in ("generate_result", "finish"):
+            continue
+        mark = "✅" if action in completed_actions else "⏳"
+        lines.append(f"  {mark} {action}")
+    return "\n".join(lines)
+
+
 def build_planner_context(
     state: AgentState,
+    completed_actions: list | None = None,
+    execution_plan: list | None = None,
     *,
     recent: int = PLANNER_RECENT_OBSERVATIONS,
 ) -> str:
@@ -72,10 +92,24 @@ def build_planner_context(
     Rule: planner reads summaries + next_hint + data references only.
     """
     observations = collect_observations(state)
+
+    # Resolve defaults from state when not passed explicitly (backward compat)
+    if completed_actions is None:
+        completed_actions = state.get("completed_actions") or []
+    if execution_plan is None:
+        execution_plan = state.get("execution_plan") or []
+
     if not observations:
-        return "(No observations yet — this is the first step.)"
+        progress = format_task_progress(completed_actions, execution_plan)
+        base = "(No observations yet — this is the first step.)"
+        return f"{progress}\n\n{base}" if progress else base
 
     sections: List[str] = []
+
+    # Prepend DB-GPT-style task progress so the planner sees it first
+    progress = format_task_progress(completed_actions, execution_plan)
+    if progress:
+        sections.append(progress)
 
     older = observations[:-recent] if len(observations) > recent else []
     if older:

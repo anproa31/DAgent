@@ -7,6 +7,7 @@ from agents.analysis.final_report import final_report_node
 from agents.analysis.insight import insight_agent_node
 from agents.analysis.viz import viz_agent_node
 from agents.executor.code_executor import code_executor_node
+from agents.executor.exec_router import exec_decider_node, route_after_exec
 from agents.executor.python import python_agent_node
 from agents.executor.sql import route_after_sql, sql_agent_node
 from agents.planner.node import planner_node
@@ -34,6 +35,8 @@ def build_graph():
     # observation the planner can react to, rather than aborting the run
     # (solution.md §9). HITL nodes (sql/python/web_discover) pass timeout=None
     # so the interrupt control-flow signal is never wrapped or clipped.
+    # exec decides SQL vs Python at runtime, then routes to the matching worker.
+    builder.add_node("exec", with_error_boundary(exec_decider_node, "exec"))
     builder.add_node("sql", with_error_boundary(sql_agent_node, "sql", timeout=None))
     builder.add_node("code_executor", with_error_boundary(code_executor_node, "code_executor"))
     builder.add_node("python", with_error_boundary(python_agent_node, "python", timeout=None))
@@ -51,6 +54,7 @@ def build_graph():
         "planner",
         route_after_planner,
         {
+            "exec": "exec",
             "sql": "sql",
             "python": "python",
             "web_discover": "web_discover",
@@ -58,6 +62,16 @@ def build_graph():
             "insight": "insight",
             "viz": "viz",
             "final_report": "final_report",
+        },
+    )
+
+    # exec → sql | python based on the runtime tool decision.
+    builder.add_conditional_edges(
+        "exec",
+        route_after_exec,
+        {
+            "sql": "sql",
+            "python": "python",
         },
     )
 

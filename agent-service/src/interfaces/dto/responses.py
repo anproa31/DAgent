@@ -70,3 +70,5 @@ class RunReportResponse(BaseModel):
     insights: Optional[str] = None
     content: List[Any] = []
     agent_steps: List[str] = []
+    thinking_segments: List[Any] = []
+    executions: List[Any] = []

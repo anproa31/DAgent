@@ -14,15 +14,19 @@ from agents.shared.llm_endpoint import normalize_base_url
 from agents.shared.state import AgentState, PlannerStep
 from agents.shared.web_discover_policy import should_use_discover_action
 from config.settings import FORCED_EXIT_THRESHOLD
+from orchestration.streaming import ThinkingTokenCallback
 
 MAX_PLANNER_STEPS = 15
+
+# Stateless — resolves the active run from a contextvar per token, so a single
+# shared instance is safe across concurrent runs and the cached planner LLM.
+_THINKING_CALLBACK = ThinkingTokenCallback()
 
 ANALYTICS_REACT_INSTRUCTIONS = """
 You are a data analytics ReAct planner. Choose ONE tool per step.
 
 Available tools:
-- sql — generate/execute SQL against registered datasources
-- python — pandas/numpy/scipy analysis in sandbox
+- exec — fetch or analyze data; the executor auto-selects SQL or Python for the task. Use this for ALL data retrieval and analysis-code steps.
 - discover_data — web data discovery (only when allowed)
 - eda — exploratory data analysis on df_result
 - insight — business narrative from data/EDA
@@ -34,6 +38,7 @@ Thought: <why this tool is needed given observations>
 Action: <tool name>
 Action Input: <optional JSON or brief note>
 
+Use Action: exec to obtain data — never assume SQL; the executor decides SQL vs Python.
 Use Action: generate_result when data and analysis already answer the query.
 Do NOT call eda/insight/viz for simple RETRIEVAL unless explicitly needed.
 """
@@ -53,6 +58,7 @@ class AnalyticsReActAgent(ReActAgent):
     """ReActAgent used for one planning step per graph iteration (workers run externally)."""
 
     VALID_ACTIONS = {
+        "exec",
         "sql",
         "python",
         "discover_data",
@@ -106,6 +112,11 @@ class AnalyticsReActAgent(ReActAgent):
             max_tokens=config.get("max_tokens", 4000),
             base_url=normalize_base_url(self._endpoint_base_url),
             api_key=self._endpoint_api_key,
+            # Stream tokens so the planner's reasoning surfaces live in the UI.
+            # The callback resolves the active run from a contextvar set by the
+            # planner node; if it can't (e.g. no run bound) it stays silent.
+            streaming=True,
+            callbacks=[_THINKING_CALLBACK],
         )
         self._llm_cache[role] = llm
         return llm
@@ -129,7 +140,7 @@ class AnalyticsReActAgent(ReActAgent):
         # steps without finishing, summarise with whatever data exists rather
         # than risk an unbounded retry loop.
         completed_actions = state.get("completed_actions") or []
-        has_data = any(a in ("sql", "python") for a in completed_actions)
+        has_data = any(a in ("exec", "sql", "python") for a in completed_actions)
         if iteration >= FORCED_EXIT_THRESHOLD and has_data:
             return {
                 "thought": (
@@ -158,12 +169,12 @@ class AnalyticsReActAgent(ReActAgent):
 
         discover_allowed, discover_reason = should_use_discover_action(state)
         if action == "discover_data" and not discover_allowed:
-            action = "sql"
-            thought = f"{thought} [discover_data blocked: {discover_reason}. Using sql.]".strip()
+            action = "exec"
+            thought = f"{thought} [discover_data blocked: {discover_reason}. Using exec.]".strip()
 
         if action not in self.VALID_ACTIONS:
-            action = "sql"
-            thought = f"{thought} [invalid action normalized to sql]".strip()
+            action = "exec"
+            thought = f"{thought} [invalid action normalized to exec]".strip()
 
         last_observation = state.get("last_observation") or {}
         execution_plan = state.get("execution_plan") or []
@@ -228,7 +239,7 @@ def _normalize_tool_name(tool_name: str) -> str:
         "finish": "generate_result",
         "web_discover": "discover_data",
     }
-    return aliases.get(normalized, normalized or "sql")
+    return aliases.get(normalized, normalized or "exec")
 
 
 def _parse_action_input(raw: Any) -> Dict[str, Any]:

@@ -33,8 +33,10 @@ def test_select_orchestration_mode():
 
 
 def test_normalise_pipeline_retrieval_fixed_vs_explore():
+    # The data step is collapsed to a generic "exec"; the runtime exec node
+    # picks SQL vs Python (agents/executor/exec_router.py).
     fixed = normalise_pipeline(["eda", "insight"], "sql", "RETRIEVAL", "FIXED", "show 5 rows")
-    assert fixed == ["sql"]
+    assert fixed == ["exec"]
 
     explore = normalise_pipeline(
         ["eda", "insight"],
@@ -43,28 +45,35 @@ def test_normalise_pipeline_retrieval_fixed_vs_explore():
         "EXPLORE",
         "show 5 rows and explore distribution",
     )
-    assert explore == ["sql", "eda", "insight"]
+    assert explore == ["exec", "eda", "insight"]
+
+
+def test_normalise_pipeline_collapses_python_to_exec():
+    # Even when the orchestrator hints python, the plan starts with exec.
+    result = normalise_pipeline(["python", "eda"], "python", "ANALYTICAL", "AUTO_PLAN", "run a t-test")
+    assert result[0] == "exec"
+    assert "python" not in result and "sql" not in result
 
 
 def test_build_execution_plan_adds_generate_result():
-    plan = build_execution_plan(["sql", "eda", "insight"], "ANALYTICAL", "sql")
+    plan = build_execution_plan(["exec", "eda", "insight"], "ANALYTICAL", "exec")
     actions = [step["action"] for step in plan]
-    assert actions == ["sql", "eda", "insight", "generate_result"]
+    assert actions == ["exec", "eda", "insight", "generate_result"]
     assert plan[1]["rely"] == [1]
     assert plan[-1]["rely"] == [3]
 
 
 def test_get_next_planned_action():
-    plan = build_execution_plan(["sql", "eda"], "ANALYTICAL", "sql")
-    assert get_next_planned_action(plan) == "sql"
+    plan = build_execution_plan(["exec", "eda"], "ANALYTICAL", "exec")
+    assert get_next_planned_action(plan) == "exec"
 
-    synced = sync_plan_with_completed(plan, ["sql"])
+    synced = sync_plan_with_completed(plan, ["exec"])
     assert get_next_planned_action(synced) == "eda"
 
 
 def test_update_plan_from_reflection_adds_viz():
-    plan = build_execution_plan(["sql", "insight"], "ANALYTICAL", "sql")
-    updated = update_plan_from_reflection(plan, "User requested a chart but none was shown", "sql")
+    plan = build_execution_plan(["exec", "insight"], "ANALYTICAL", "exec")
+    updated = update_plan_from_reflection(plan, "User requested a chart but none was shown", "exec")
     worker_actions = [
         step["action"]
         for step in updated
@@ -74,30 +83,30 @@ def test_update_plan_from_reflection_adds_viz():
 
 
 def test_resolve_planner_action_fixed_mode():
-    plan = build_execution_plan(["sql", "eda"], "ANALYTICAL", "sql")
+    plan = build_execution_plan(["exec", "eda"], "ANALYTICAL", "exec")
     state = {
         "orchestration_mode": "FIXED",
         "execution_plan": plan,
         "completed_actions": [],
     }
     action, note = resolve_planner_action(state, "insight", last_observation={})
-    assert action == "sql"
+    assert action == "exec"
     assert "FIXED" in note
 
 
 def test_resolve_planner_action_auto_plan_blocks_early_finish():
-    plan = build_execution_plan(["sql", "eda", "insight"], "ANALYTICAL", "sql")
+    plan = build_execution_plan(["exec", "eda", "insight"], "ANALYTICAL", "exec")
     state = {
         "orchestration_mode": "AUTO_PLAN",
         "execution_plan": plan,
         "completed_actions": [],
     }
     action, _ = resolve_planner_action(state, "generate_result", last_observation={})
-    assert action == "sql"
+    assert action == "exec"
 
 
 def test_format_plan_for_prompt_includes_mode():
-    plan = build_execution_plan(["sql"], "RETRIEVAL", "sql")
+    plan = build_execution_plan(["exec"], "RETRIEVAL", "exec")
     text = format_plan_for_prompt(plan, "FIXED")
     assert "Orchestration mode: FIXED" in text
-    assert "Step 1: sql" in text
+    assert "Step 1: exec" in text

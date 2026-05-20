@@ -6,7 +6,7 @@ from typing import List
 
 from orchestration.routing.plan import OrchestrationMode, detect_explore_intent
 
-_VALID_STEPS = frozenset({"sql", "python", "eda", "insight", "viz"})
+_VALID_STEPS = frozenset({"exec", "sql", "python", "eda", "insight", "viz"})
 
 
 def normalise_pipeline(
@@ -16,10 +16,15 @@ def normalise_pipeline(
     orchestration_mode: OrchestrationMode = "FIXED",
     query: str = "",
 ) -> list:
-    """Ensure the first step matches execution_mode and sensible follow-ups."""
+    """Collapse the data step to a generic ``exec`` and keep sensible follow-ups.
+
+    The concrete SQL-vs-Python decision is deferred to the runtime exec node
+    (agents/executor/exec_router.py), so the plan always starts with ``exec``
+    regardless of the orchestrator's ``execution_mode`` hint.
+    """
     pipeline = [step for step in pipeline if step in _VALID_STEPS]
-    pipeline = [step for step in pipeline if step not in ("sql", "python")]
-    pipeline.insert(0, execution_mode)
+    pipeline = [step for step in pipeline if step not in ("sql", "python", "exec")]
+    pipeline.insert(0, "exec")
 
     if intent == "RETRIEVAL" and orchestration_mode == "FIXED" and not detect_explore_intent(query):
         return pipeline[:1]

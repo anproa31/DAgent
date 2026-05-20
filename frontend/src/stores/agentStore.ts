@@ -3,9 +3,13 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 import type {
   AgentUpdateEvent,
   SqlGeneratedEvent,
-  WebDatasourceProposal,
   DoneEvent,
   AnswerChunkEvent,
+  ThinkingChunkEvent,
+  ExecutionResultEvent,
+  PythonReviewEvent,
+  ThinkingSegment,
+  ExecutionEntry,
 } from '@/services/api/agent'
 import type { ReportBlock } from '@/types/report'
 
@@ -20,7 +24,7 @@ export type RunPhase =
   /** User closed the SSE stream (stop button); backend may still be running. */
   | 'stopped'
 
-export type ApprovalKind = 'sql' | 'web_datasource' | null
+export type ApprovalKind = 'sql' | 'web_datasource' | 'python' | null
 
 export interface WebDiscoverCandidate {
   title: string
@@ -51,8 +55,15 @@ export interface AgentRun {
   pendingSql: string
   pendingSqlExplanation: string
   pendingWebProposal: WebDatasourceProposal | null
+  // HITL Python (medium-risk review)
+  pendingPythonCode: string
+  pendingPythonRisk: string
   // Streaming answer (token/chunk accumulator while phase is active)
   streamingAnswer: string
+  // Real-time thinking (token-streamed reasoning/generation, grouped by step)
+  thinkingSegments: ThinkingSegment[]
+  // SQL/Python execution cards (code + sandbox log)
+  executions: ExecutionEntry[]
   // Results
   content: ReportBlock[]
   insights: string
@@ -85,9 +96,12 @@ interface AgentStore {
   addRun: (runId: string, sessionId: string, query: string) => void
   setPhase: (runId: string, phase: RunPhase) => void
   setThinking: (runId: string, message: string, agent: string) => void
+  handleThinkingChunk: (runId: string, data: ThinkingChunkEvent) => void
+  handleExecutionResult: (runId: string, data: ExecutionResultEvent) => void
   handleAgentUpdate: (runId: string, data: AgentUpdateEvent) => void
   handleSqlGenerated: (runId: string, data: SqlGeneratedEvent) => void
   handleWebDatasourceProposed: (runId: string, data: WebDatasourceProposal) => void
+  handlePythonReviewRequired: (runId: string, data: PythonReviewEvent) => void
   updatePendingSql: (runId: string, sql: string) => void
   handleAnswerChunk: (runId: string, data: AnswerChunkEvent) => void
   handleDone: (runId: string, data: DoneEvent) => void
@@ -154,7 +168,11 @@ export const useAgentStore = create<AgentStore>()(
           pendingSql: '',
           pendingSqlExplanation: '',
           pendingWebProposal: null,
+          pendingPythonCode: '',
+          pendingPythonRisk: '',
           streamingAnswer: '',
+          thinkingSegments: [],
+          executions: [],
           content: [],
           insights: '',
           error: '',
@@ -173,6 +191,55 @@ export const useAgentStore = create<AgentStore>()(
             ...(agent ? { currentAgent: agent } : {}),
           }),
         })),
+
+      handleThinkingChunk: (runId, data) =>
+        set((s) => {
+          const existing = s.runs.find((r) => r.runId === runId)
+          if (!existing || !data.delta) return {}
+          const segments = existing.thinkingSegments
+          const last = segments[segments.length - 1]
+          // Continue the open segment for the same (agent, step); else start one.
+          let nextSegments: ThinkingSegment[]
+          if (last && last.agent === data.agent && last.step === data.step) {
+            nextSegments = [
+              ...segments.slice(0, -1),
+              { ...last, text: last.text + data.delta },
+            ]
+          } else {
+            nextSegments = [
+              ...segments,
+              {
+                id: `${data.agent}-${data.step}-${segments.length}`,
+                agent: data.agent,
+                step: data.step,
+                text: data.delta,
+              },
+            ]
+          }
+          return { runs: updateRun(s.runs, runId, { thinkingSegments: nextSegments }) }
+        }),
+
+      handleExecutionResult: (runId, data) =>
+        set((s) => {
+          const existing = s.runs.find((r) => r.runId === runId)
+          if (!existing) return {}
+          const entry: ExecutionEntry = {
+            id: data.id,
+            kind: data.kind,
+            code: data.code,
+            log: data.log,
+            columns: data.columns ?? [],
+            rows: data.rows ?? 0,
+            status: data.status,
+            error: data.error ?? '',
+          }
+          const idx = existing.executions.findIndex((e) => e.id === data.id)
+          const executions =
+            idx >= 0
+              ? existing.executions.map((e, i) => (i === idx ? entry : e))
+              : [...existing.executions, entry]
+          return { runs: updateRun(s.runs, runId, { executions }) }
+        }),
 
       handleAgentUpdate: (runId, data) =>
         set((s) => {
@@ -212,6 +279,19 @@ export const useAgentStore = create<AgentStore>()(
             pendingWebProposal: data,
             pendingSql: '',
             pendingSqlExplanation: '',
+          }),
+        })),
+
+      handlePythonReviewRequired: (runId, data) =>
+        set((s) => ({
+          runs: updateRun(s.runs, runId, {
+            phase: 'awaiting_approval',
+            approvalKind: 'python',
+            pendingPythonCode: data.code,
+            pendingPythonRisk: data.risk,
+            pendingSql: '',
+            pendingSqlExplanation: '',
+            pendingWebProposal: null,
           }),
         })),
 
@@ -279,9 +359,13 @@ export const useAgentStore = create<AgentStore>()(
               thinkingMessage: '',
               currentAgent: '',
               agentSteps: [],
+              thinkingSegments: [],
+              executions: [],
               pendingSql: '',
               pendingSqlExplanation: '',
               pendingWebProposal: null,
+              pendingPythonCode: '',
+              pendingPythonRisk: '',
               approvalKind: null,
             }),
             activeRunId,

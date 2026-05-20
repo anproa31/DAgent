@@ -17,9 +17,12 @@ export interface AgentStreamHandlerOptions {
 export function useAgentStreamHandlers() {
   const {
     setThinking,
+    handleThinkingChunk,
+    handleExecutionResult,
     handleAgentUpdate,
     handleSqlGenerated,
     handleWebDatasourceProposed,
+    handlePythonReviewRequired,
     handleAnswerChunk,
     handleDone,
     handleError,
@@ -45,9 +48,12 @@ export function useAgentStreamHandlers() {
 
       return {
         onThinking: (d) => setThinking(runId, d.message, d.agent),
+        onThinkingChunk: (d) => handleThinkingChunk(runId, d),
+        onExecutionResult: (d) => handleExecutionResult(runId, d),
         onAgentUpdate: (d) => handleAgentUpdate(runId, d),
         onSqlGenerated: (d) => handleSqlGenerated(runId, d),
         onWebDatasourceProposed: (d) => handleWebDatasourceProposed(runId, d),
+        onPythonReviewRequired: (d) => handlePythonReviewRequired(runId, d),
         onAnswerChunk: (d) => handleAnswerChunk(runId, d),
         onTitleUpdated: (d) => {
           if (d.session_id && d.title) {
@@ -70,9 +76,12 @@ export function useAgentStreamHandlers() {
     },
     [
       setThinking,
+      handleThinkingChunk,
+      handleExecutionResult,
       handleAgentUpdate,
       handleSqlGenerated,
       handleWebDatasourceProposed,
+      handlePythonReviewRequired,
       handleAnswerChunk,
       handleDone,
       handleError,

@@ -1,5 +1,6 @@
 from agents.shared.observations import create_observation
 from agents.shared.state import AgentState
+from orchestration.streaming import make_delta_emitter
 from utils.agent_logger import get_logger
 from utils.llm_client import get_async_client, chat_complete
 from utils.prompts import INSIGHT_AGENT_SYSTEM, format_semantic_context_for_prompt
@@ -28,7 +29,14 @@ async def insight_agent_node(state: AgentState) -> dict:
     ]
 
     try:
-        insights = await chat_complete(client, model, messages, temperature=0.4, log_tag="insight_agent")
+        insights = await chat_complete(
+            client,
+            model,
+            messages,
+            temperature=0.4,
+            log_tag="insight_agent",
+            on_delta=make_delta_emitter(state.get("run_id", ""), "insight"),
+        )
         logger.info("exit success (%d chars)", len(insights))
         obs = create_observation(
             agent_name="insight",

@@ -24,6 +24,14 @@ class RunState:
         self.run_id = run_id
         self.query = query
         self.event_queue: asyncio.Queue = asyncio.Queue()
+        # Event loop driving this run — captured in run_graph so the planner's
+        # streaming token callback (a worker thread) can bridge back to the queue.
+        self.loop: Optional[asyncio.AbstractEventLoop] = None
+        # Live streaming artifacts (persisted so reload can replay them):
+        #  - thinking_segments: {id, agent, step, text} reasoning/generation chunks
+        #  - executions: {id, kind, code, log, columns, rows, status, error}
+        self.thinking_segments: list = []
+        self.executions: list = []
         self.approval_event: asyncio.Event = asyncio.Event()
         self.approval_data: dict = {}
         self.done: bool = False
@@ -156,8 +164,39 @@ async def persist_run_to_db(run: RunState) -> None:
             insights=run.insights or None,
             report_content=normalize_report_content(run.report_content),
             agent_steps=list(run.agent_steps) if run.agent_steps else [],
+            thinking_segments=list(run.thinking_segments) if run.thinking_segments else [],
+            executions=list(run.executions) if run.executions else [],
         )
         await session_repository.touch_session(db, run.session_id)
+
+
+async def _emit_execution_result(run: RunState, node_name: str, node_output: dict) -> None:
+    """Record + stream a SQL/Python execution card (code + sandbox log)."""
+    obs = node_output.get("last_observation") or {}
+    artifacts = obs.get("artifacts") or {}
+
+    if node_name == "code_executor":
+        kind = "sql"
+        code = node_output.get("sql_draft") or artifacts.get("sql_draft") or run.sql_draft or ""
+    else:
+        kind = "python"
+        code = node_output.get("python_code") or artifacts.get("python_code") or run.python_code or ""
+
+    error = node_output.get("error") or obs.get("error") or ""
+    execution = {
+        "id": f"{kind}-{len(run.executions)}",
+        "kind": kind,
+        "code": code,
+        "log": node_output.get("data_summary") or artifacts.get("data_summary") or "",
+        "columns": artifacts.get("columns") or [],
+        "rows": int(artifacts.get("rows") or 0),
+        "status": "error" if error else "success",
+        "error": error,
+    }
+    run.executions.append(execution)
+    await run.event_queue.put(
+        {"event": "execution_result", "data": {"run_id": run.run_id, **execution}}
+    )
 
 
 async def _stream_graph_chunks(run: RunState, config: dict, input_or_command):
@@ -204,6 +243,19 @@ async def _stream_graph_chunks(run: RunState, config: dict, input_or_command):
                     action = last_step.get("action", "")
                     step_index = node_output.get("planner_step_index", len(planner_history))
                     if thought:
+                        # Fallback: if token streaming produced no planner segment
+                        # this turn (e.g. agent_patterns didn't surface tokens),
+                        # seed the segment from the parsed thought so the thinking
+                        # view is never empty.
+                        if not run.thinking_segments or run.thinking_segments[-1].get("agent") != "planner":
+                            run.thinking_segments.append(
+                                {
+                                    "id": f"planner-{step_index}-{len(run.thinking_segments)}",
+                                    "agent": "planner",
+                                    "step": step_index,
+                                    "text": thought,
+                                }
+                            )
                         await run.event_queue.put(
                             {
                                 "event": "planner_thought",
@@ -214,6 +266,9 @@ async def _stream_graph_chunks(run: RunState, config: dict, input_or_command):
                                 },
                             }
                         )
+
+            if node_name in ("code_executor", "python") and isinstance(node_output, dict):
+                await _emit_execution_result(run, node_name, node_output)
 
             await run.event_queue.put({"event": "agent_update", "data": event_data})
 
@@ -311,6 +366,9 @@ async def _handle_hitl_interrupt(run: RunState, config: dict) -> bool:
 async def run_graph(run: RunState, initial_input: dict) -> None:
     """Background task: stream the graph, handle HITL interrupt, and push SSE events."""
     config = {"configurable": {"thread_id": run.run_id}}
+    # Capture the loop here (run_graph executes on the main loop) so worker-thread
+    # token callbacks can enqueue events via loop.call_soon_threadsafe.
+    run.loop = asyncio.get_running_loop()
 
     try:
         await run.event_queue.put(

@@ -229,6 +229,58 @@ REPORT_TEMPLATE = """# Analysis Report
 {viz_placeholder}
 """
 
+EXEC_DECISION_PROMPT = """You are an execution planner. Decide whether SQL or Python is the better tool to answer the user's data task. Pick the most EFFICIENT tool — do not default to SQL out of habit.
+
+Choose **sql** when:
+- Data retrieval, filtering, joins, grouping, or simple aggregations (sum/avg/count/min/max/median)
+- A single DuckDB query produces the answer
+
+Choose **python** when:
+- Statistical tests: t-test, chi-square, ANOVA, regression, correlation matrices
+- Hypothesis testing, p-values, confidence intervals, z-scores
+- Machine learning, forecasting, clustering, outlier/anomaly detection
+- Complex reshaping (pivot/melt) or computations awkward in SQL
+- Anything needing scipy / statsmodels / sklearn / numpy beyond basic aggregation
+
+Semantic context:
+{context}
+
+Datasource schema:
+{schema}
+
+Respond with ONLY this JSON:
+{{"execution_mode": "sql" or "python", "reason": "one short sentence"}}
+"""
+
+PLAN_VALIDATION_PROMPT = """You are a pipeline validation agent. Your job: review a proposed analytics pipeline and decide if it is minimal and correct for the user's query.
+
+## Available pipeline steps
+- sql       : fetch data via SQL (always first step)
+- python    : pandas/numpy/scipy analysis (alternative to sql for complex transforms)
+- eda       : exploratory data analysis — distributions, missing values, correlations
+- insight   : business narrative / interpretation of findings
+- viz       : matplotlib chart/visualization
+
+## Rules — use ONLY steps the query actually needs:
+- viz alone does NOT require eda or insight. "Plot a bar chart" → ["sql", "viz"]
+- insight alone does NOT require eda for simple aggregations. "Average X by Y" → ["sql", "insight"]
+- eda is only needed for distribution/correlation/missing-value analysis
+- Never add eda/insight/viz unless the query specifically calls for them
+- If unsure, keep the pipeline minimal
+
+## Input
+Query: {query}
+Intent: {intent}
+Proposed pipeline: {proposed_pipeline}
+
+## Output format — respond with ONLY this JSON:
+{{
+  "thought": "One sentence explaining whether each proposed step is justified",
+  "decision": "accept" or "revise",
+  "pipeline": [list of steps — same as proposed if accept, corrected if revise]
+}}
+"""
+
 PLANNER_SYSTEM = """You are a ReAct planner agent for data analytics. Your job is to decide the **next single action** based on the user query, the orchestrator's execution plan, and all observations so far.
 
 ## Core Rules

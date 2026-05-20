@@ -17,6 +17,7 @@ from context.schema_service import (
     get_datasources,
 )
 from orchestration.routing.plan import format_plan_for_prompt, get_remaining_plan_summary
+from orchestration.streaming import current_run_var
 from utils.agent_logger import get_logger
 from utils.prompts import format_semantic_context_for_prompt
 
@@ -83,7 +84,13 @@ async def planner_node(state: AgentState) -> dict:
 
     # Planner reads summarised observations only — never raw worker data
     # (solution.md §1 Fix 1/3, §8). Keeps the context window bounded.
-    observation_context = build_planner_context(state)
+    # Pass completed_actions + execution_plan so DB-GPT-style task progress
+    # checkmarks (✅/⏳) appear at the top of the context (context_builder.py).
+    observation_context = build_planner_context(
+        state,
+        completed_actions=completed_actions,
+        execution_plan=execution_plan,
+    )
 
     task_context = (
         f"User query: {state['query']}\n\n"
@@ -107,12 +114,16 @@ async def planner_node(state: AgentState) -> dict:
         model=state.get("model", ""),
     )
 
+    # Bind this run to the planner's streaming token callback. asyncio.to_thread
+    # copies the current context into the worker thread, so the contextvar set
+    # here is visible to ThinkingTokenCallback while the LLM streams.
+    ctx_token = current_run_var.set((state.get("run_id", ""), "planner"))
     try:
         decision = await asyncio.to_thread(agent.plan_next, state, task_context=task_context)
     except Exception as exc:
         logger.warning("ReAct planner error, using fallback: %s", exc)
         decision = (
-            {"thought": "ReAct error, defaulting to sql", "action": "sql", "action_input": {}}
+            {"thought": "ReAct error, defaulting to exec", "action": "exec", "action_input": {}}
             if is_first_step
             else {
                 "thought": "ReAct error, defaulting to generate_result",
@@ -120,8 +131,10 @@ async def planner_node(state: AgentState) -> dict:
                 "action_input": {},
             }
         )
+    finally:
+        current_run_var.reset(ctx_token)
 
-    action = decision.get("action", "sql")
+    action = decision.get("action", "exec")
     thought = decision.get("thought", "")
     action_input = decision.get("action_input", {})
     intent = state.get("intent", "RETRIEVAL")
@@ -131,6 +144,16 @@ async def planner_node(state: AgentState) -> dict:
         execution_mode = "sql"
 
     logger.info("exit thought=%r action=%s", thought[:80], action)
+    # Debug: surface planner reasoning to help diagnose "thinking shows full workflow" (Bug 3)
+    logger.debug(
+        "step=%d intent=%s pipeline=%s completed=%s action=%s thought=%r",
+        planner_step_index,
+        intent,
+        state.get("pipeline"),
+        completed_actions,
+        action,
+        thought[:200],
+    )
 
     new_step: PlannerStep = {
         "thought": thought,

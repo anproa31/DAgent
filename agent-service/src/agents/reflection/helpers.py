@@ -37,7 +37,7 @@ def build_data_context_from_history(planner_history: list) -> str:
         if not observation:
             continue
 
-        if action in ("sql", "python"):
+        if action in ("exec", "sql", "python"):
             parts = []
 
             if observation.get("sql"):
