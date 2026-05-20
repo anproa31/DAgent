@@ -74,7 +74,7 @@ def build_graph():
         route_after_reflection,
         {
             "final_report": END,
-            "planner": "planner",
+            "orchestrator": "orchestrator",
         },
     )
 

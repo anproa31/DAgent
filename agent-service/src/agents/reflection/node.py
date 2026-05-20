@@ -127,5 +127,5 @@ def route_after_reflection(state: AgentState) -> str:
         logger.warning("route max replan reached -> END")
         return "final_report"
 
-    logger.info("route reflection failed -> planner")
-    return "planner"
+    logger.info("route reflection failed -> orchestrator (re-plan pipeline)")
+    return "orchestrator"

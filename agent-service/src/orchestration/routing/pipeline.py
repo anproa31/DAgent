@@ -4,16 +4,24 @@ from __future__ import annotations
 
 from typing import List
 
+from orchestration.routing.plan import OrchestrationMode, detect_explore_intent
+
 _VALID_STEPS = frozenset({"sql", "python", "eda", "insight", "viz"})
 
 
-def normalise_pipeline(pipeline: list, execution_mode: str, intent: str) -> list:
+def normalise_pipeline(
+    pipeline: list,
+    execution_mode: str,
+    intent: str,
+    orchestration_mode: OrchestrationMode = "FIXED",
+    query: str = "",
+) -> list:
     """Ensure the first step matches execution_mode and sensible follow-ups."""
     pipeline = [step for step in pipeline if step in _VALID_STEPS]
     pipeline = [step for step in pipeline if step not in ("sql", "python")]
     pipeline.insert(0, execution_mode)
 
-    if intent == "RETRIEVAL":
+    if intent == "RETRIEVAL" and orchestration_mode == "FIXED" and not detect_explore_intent(query):
         return pipeline[:1]
     return pipeline
 
@@ -41,4 +49,4 @@ def adjust_pipeline_for_reflection(
         if agent not in pipeline:
             pipeline.append(agent)
 
-    return normalise_pipeline(pipeline, execution_mode, intent)
+    return normalise_pipeline(pipeline, execution_mode, intent, orchestration_mode="EXPLORE")
