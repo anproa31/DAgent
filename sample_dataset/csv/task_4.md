@@ -1,0 +1,1 @@
+Use a boxplot to show the relationship between Attrition and Monthly Income, and check whether employees who left tend to have lower monthly income.

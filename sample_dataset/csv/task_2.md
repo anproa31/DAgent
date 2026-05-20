@@ -1,0 +1,1 @@
+Use a Chi-square test to examine whether there is a difference in business travel frequency between single and married employees.
