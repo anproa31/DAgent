@@ -11,7 +11,7 @@ from agents.executor.python import python_agent_node
 from agents.executor.sql import route_after_sql, sql_agent_node
 from agents.planner.node import planner_node
 from agents.planner.routing import route_after_planner
-from agents.reflection.node import reflection_agent_node, route_after_reflection
+from agents.reflection.nodes import reflection_node, route_after_final_report
 from agents.shared.state import AgentState
 from orchestration.orchestrator.node import orchestrator_node
 from utils.agent_logger import get_logger
@@ -32,8 +32,8 @@ def build_graph():
     builder.add_node("eda", eda_agent_node)
     builder.add_node("insight", insight_agent_node)
     builder.add_node("viz", viz_agent_node)
-    builder.add_node("reflection", reflection_agent_node)
     builder.add_node("final_report", final_report_node)
+    builder.add_node("reflection", reflection_node)
 
     builder.set_entry_point("orchestrator")
     builder.add_edge("orchestrator", "planner")
@@ -67,19 +67,15 @@ def build_graph():
     builder.add_edge("insight", "planner")
     builder.add_edge("viz", "planner")
 
-    builder.add_edge("final_report", "reflection")
-
     builder.add_conditional_edges(
-        "reflection",
-        route_after_reflection,
-        {
-            "final_report": END,
-            "orchestrator": "orchestrator",
-        },
+        "final_report",
+        route_after_final_report,
+        {"reflection": "reflection", "done": END},
     )
+    builder.add_edge("reflection", END)
 
     checkpointer = MemorySaver()
-    logger.info("LangGraph compiled (planner hub topology)")
+    logger.info("LangGraph compiled (agent-patterns ReAct + Reflection)")
     return builder.compile(checkpointer=checkpointer)
 
 

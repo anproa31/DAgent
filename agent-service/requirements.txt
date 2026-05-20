@@ -6,6 +6,7 @@ openai==1.74.0
 langgraph==0.3.34
 langchain-core==0.3.59
 langchain-openai==0.3.16
+agent-patterns==0.2.4
 python-dotenv==1.1.0
 sqlalchemy[asyncio]==2.0.40
 aiosqlite==0.21.0

@@ -86,11 +86,13 @@ class AgentState(TypedDict, total=False):
     # Final compiled report
     report_content: List[Any]
 
-    # Reflection quality gate
-    reflection_passed: bool
-    reflection_feedback: str
-    reflection_replan_reason: str
-    replan_count: int
+    # Agent-patterns Reflection (generate → reflect → refine)
+    reflection_cycle: int
+    max_reflection_cycles: int
+    reflection: str
+    refined_output: str
+    needs_refinement: bool
+    continue_reflection: bool
 
     # Control
     done: bool
