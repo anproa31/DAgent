@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Download, X, Copy } from 'lucide-react'
 import { toast } from 'sonner'
 import * as XLSX from 'xlsx'
@@ -101,6 +102,9 @@ function CodePanelContent({
   )
 }
 
+const LARGE_TABLE_ROW_THRESHOLD = 500
+const LARGE_TABLE_PAGE_SIZE = 50
+
 // Table panel for split view
 function TablePanelContent({
   content,
@@ -131,6 +135,22 @@ function TablePanelContent({
     headers = rows[0] || []
     dataRows = rows.slice(1)
   }
+
+  const isLargeTable = dataRows.length > LARGE_TABLE_ROW_THRESHOLD
+  const [visibleRowCount, setVisibleRowCount] = useState(() =>
+    isLargeTable ? LARGE_TABLE_PAGE_SIZE : dataRows.length
+  )
+
+  useEffect(() => {
+    setVisibleRowCount(
+      dataRows.length > LARGE_TABLE_ROW_THRESHOLD
+        ? LARGE_TABLE_PAGE_SIZE
+        : dataRows.length
+    )
+  }, [content, dataRows.length])
+
+  const displayedRows = dataRows.slice(0, visibleRowCount)
+  const hiddenRowCount = Math.max(0, dataRows.length - visibleRowCount)
 
   const downloadCSV = () => {
     let csvContent: string
@@ -219,6 +239,12 @@ function TablePanelContent({
       <div className='flex shrink-0 items-center justify-between gap-3 border-b bg-muted/50 px-4 py-3'>
         <span className='min-w-0 truncate text-sm font-semibold text-foreground'>
           Table ({dataRows.length} rows &times; {headers.length} columns)
+          {isLargeTable && (
+            <span className='text-muted-foreground font-normal'>
+              {' '}
+              &mdash; showing {visibleRowCount}
+            </span>
+          )}
         </span>
         <Button
           onClick={onClose}
@@ -267,7 +293,7 @@ function TablePanelContent({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {dataRows.map((row, rowIndex) => (
+            {displayedRows.map((row, rowIndex) => (
               <TableRow key={rowIndex}>
                 {row.map((cell, cellIndex) => (
                   <TableCell key={cellIndex} className='whitespace-nowrap'>
@@ -279,6 +305,27 @@ function TablePanelContent({
           </TableBody>
         </Table>
       </div>
+
+      {hiddenRowCount > 0 && (
+        <div className='flex shrink-0 justify-center border-t px-4 py-3'>
+          <Button
+            variant='outline'
+            size='sm'
+            onClick={() =>
+              setVisibleRowCount((count) =>
+                Math.min(count + LARGE_TABLE_PAGE_SIZE, dataRows.length)
+              )
+            }
+          >
+            Show {Math.min(hiddenRowCount, LARGE_TABLE_PAGE_SIZE)} more{' '}
+            {Math.min(hiddenRowCount, LARGE_TABLE_PAGE_SIZE) === 1
+              ? 'row'
+              : 'rows'}
+            {hiddenRowCount > LARGE_TABLE_PAGE_SIZE &&
+              ` (${hiddenRowCount} remaining)`}
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

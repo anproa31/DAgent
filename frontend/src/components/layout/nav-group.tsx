@@ -7,6 +7,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   useSidebar,
 } from '@/components/ui/sidebar'
 import { Badge } from '../ui/badge'
@@ -71,8 +74,9 @@ const DeleteConfirmDialog = ({
 )
 
 type CollapsibleSubItem = NavCollapsible['items'][number] & {
-  url: string
+  url?: string
   search?: Record<string, unknown>
+  params?: Record<string, string>
 }
 
 function IconModeNavSection({
@@ -139,6 +143,7 @@ function CollapsibleNavSection({
   defaultOpen = true,
   scrollable = false,
   onDeleteRequest,
+  onOpenModal,
   isIconMode = false,
 }: {
   title: string
@@ -147,6 +152,7 @@ function CollapsibleNavSection({
   defaultOpen?: boolean
   scrollable?: boolean
   onDeleteRequest: (target: { id: string; title: string }) => void
+  onOpenModal?: () => void
   isIconMode?: boolean
 }) {
   const [open, setOpen] = useState(defaultOpen)
@@ -173,85 +179,120 @@ function CollapsibleNavSection({
               />
             </SidebarMenuButton>
           </CollapsibleTrigger>
-        </SidebarMenuItem>
-      </SidebarMenu>
-      <CollapsibleContent className='CollapsibleContent'>
-        <div
-          className={cn(
-            scrollable && 'overflow-auto min-h-0 flex-1 max-h-[calc(100vh-300px)]'
-          )}
-        >
-          <SidebarMenu>
-            {items.map((subItem) => {
-              if (!('url' in subItem)) return null
-              const isPlaceholder = !!subItem.placeholder
-
-              return (
-                <SidebarMenuItem key={subItem.url + subItem.title}>
-                  <div className='group/navitem flex items-center w-full'>
-                    <SidebarMenuButton
-                      asChild={!isPlaceholder}
-                      className='flex-1'
-                      disabled={isPlaceholder}
-                    >
-                      {isPlaceholder ? (
-                        <span className='text-muted-foreground truncate px-2'>
-                          {subItem.title}
-                        </span>
-                      ) : (
-                        <Link
-                          to={subItem.url}
-                          search={'search' in subItem ? (subItem.search as any) : undefined}
+          <CollapsibleContent className='CollapsibleContent'>
+            <div
+              className={cn(
+                scrollable && 'max-h-[calc(100vh-300px)] min-h-0 flex-1 overflow-auto'
+              )}
+            >
+              <SidebarMenuSub>
+                {items.map((subItem) => {
+                  if ('action' in subItem && subItem.action === 'openModal') {
+                    const ActionIcon = subItem.icon
+                    return (
+                      <SidebarMenuSubItem key={subItem.title}>
+                        <SidebarMenuSubButton
+                          onClick={onOpenModal}
+                          className='text-muted-foreground'
                         >
-                          {subItem.icon && <subItem.icon />}
+                          {ActionIcon && <ActionIcon />}
                           <span className='truncate'>{subItem.title}</span>
-                          {subItem.badge && <NavBadge>{subItem.badge}</NavBadge>}
-                        </Link>
-                      )}
-                    </SidebarMenuButton>
-                    {!isPlaceholder && subItem.id && (
-                      <div className='flex shrink-0 items-center mr-1 opacity-0 group-hover/navitem:opacity-100 transition-opacity duration-150'>
-                        {subItem.onPinToggle && (
-                          <button
-                            type='button'
-                            onClick={(e) => {
-                              e.preventDefault()
-                              e.stopPropagation()
-                              subItem.onPinToggle!(subItem.id!)
-                            }}
-                            className='p-1 rounded-sm hover:bg-sidebar-accent text-muted-foreground'
-                            title={subItem.isPinned ? 'Unpin conversation' : 'Pin conversation'}
-                          >
-                            {subItem.isPinned ? (
-                              <PinOff className='h-3.5 w-3.5' />
-                            ) : (
-                              <Pin className='h-3.5 w-3.5' />
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                    )
+                  }
+
+                  if (!('url' in subItem) || !subItem.url) return null
+                  const isPlaceholder = !!subItem.placeholder
+
+                  return (
+                    <SidebarMenuSubItem
+                      key={subItem.url + subItem.title}
+                      className='group/navitem'
+                    >
+                      <div className='relative w-full'>
+                        <SidebarMenuSubButton
+                          asChild={!isPlaceholder}
+                          className={cn(
+                            'min-w-0 w-full',
+                            !isPlaceholder &&
+                              subItem.id &&
+                              'group-hover/navitem:pr-[3.25rem]'
+                          )}
+                          aria-disabled={isPlaceholder}
+                        >
+                          {isPlaceholder ? (
+                            <span className='text-muted-foreground truncate'>
+                              {subItem.title}
+                            </span>
+                          ) : (
+                            <Link
+                              to={subItem.url}
+                              params={
+                                'params' in subItem ? (subItem.params as any) : undefined
+                              }
+                              search={
+                                'search' in subItem ? (subItem.search as any) : undefined
+                              }
+                            >
+                              {subItem.icon && <subItem.icon />}
+                              <span className='truncate'>{subItem.title}</span>
+                              {subItem.badge && <NavBadge>{subItem.badge}</NavBadge>}
+                            </Link>
+                          )}
+                        </SidebarMenuSubButton>
+                        {!isPlaceholder && subItem.id && (
+                          <div className='pointer-events-none absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-0 opacity-0 transition-opacity duration-150 group-hover/navitem:pointer-events-auto group-hover/navitem:opacity-100'>
+                            {subItem.onPinToggle && (
+                              <button
+                                type='button'
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  subItem.onPinToggle!(subItem.id!)
+                                }}
+                                className='rounded-sm p-1 text-muted-foreground hover:bg-sidebar-accent'
+                                title={
+                                  subItem.isPinned
+                                    ? 'Unpin conversation'
+                                    : 'Pin conversation'
+                                }
+                              >
+                                {subItem.isPinned ? (
+                                  <PinOff className='h-3.5 w-3.5' />
+                                ) : (
+                                  <Pin className='h-3.5 w-3.5' />
+                                )}
+                              </button>
                             )}
-                          </button>
-                        )}
-                        {subItem.onDelete && (
-                          <button
-                            type='button'
-                            onClick={(e) => {
-                              e.preventDefault()
-                              e.stopPropagation()
-                              onDeleteRequest({ id: subItem.id!, title: subItem.title })
-                            }}
-                            className='p-1 rounded-sm hover:bg-destructive/10 hover:text-destructive text-muted-foreground'
-                            title='Delete conversation'
-                          >
-                            <Trash2 className='h-3.5 w-3.5' />
-                          </button>
+                            {subItem.onDelete && (
+                              <button
+                                type='button'
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  onDeleteRequest({
+                                    id: subItem.id!,
+                                    title: subItem.title,
+                                  })
+                                }}
+                                className='rounded-sm p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive'
+                                title='Delete conversation'
+                              >
+                                <Trash2 className='h-3.5 w-3.5' />
+                              </button>
+                            )}
+                          </div>
                         )}
                       </div>
-                    )}
-                  </div>
-                </SidebarMenuItem>
-              )
-            })}
-          </SidebarMenu>
-        </div>
-      </CollapsibleContent>
+                    </SidebarMenuSubItem>
+                  )
+                })}
+              </SidebarMenuSub>
+            </div>
+          </CollapsibleContent>
+        </SidebarMenuItem>
+      </SidebarMenu>
     </Collapsible>
   )
 }
@@ -262,7 +303,9 @@ export function NavGroup({
 }: NavGroupType) {
   const { state, isMobile } = useSidebar()
 
-  const datasourceItem = items.find((item) => item.title === 'All Datasources')
+  const datasourceItem = items.find(
+    (item) => item.title === 'All Datasources' && 'url' in item
+  )
   const pinnedItem = items.find(
     (item): item is NavCollapsible => item.title === 'Pinned' && 'items' in item
   )
@@ -272,7 +315,6 @@ export function NavGroup({
 
   const isCollapsed = state === 'collapsed' && !isMobile
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null)
-
   const handleDeleteConfirm = () => {
     if (!deleteTarget) return
     const sections = [pinnedItem, historyItem]
