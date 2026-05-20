@@ -14,10 +14,7 @@ import {
 import { type FormEventHandler, useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from '@tanstack/react-router';
 import { toast } from 'sonner';
-import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
-import { ThemeSwitch } from '@/components/theme-switch'
-import { Setting } from '@/components/setting'
 import { useStartAnalysis, useModelListByMode, ModelInfo, useCreateSpace, useGenerateTitle } from '@/hooks/use-analysis'
 import { useGlobalFileDrop } from '@/hooks/use-global-file-drop'
 import { useSharedAnalysisHistory } from '@/context/analysis-history-context' // TODO: Replace with useContext.
@@ -188,14 +185,6 @@ export default function NewAnalysis() {
 
   return (
     <>
-      {/* ===== Top Heading ===== */}
-      <Header fixed>
-        <div className='ml-auto flex items-center space-x-4'>
-          <ThemeSwitch />
-          <Setting />
-        </div>
-      </Header>
-
       {/* ===== Main ===== */}
       <Main className='h-full'>
         {/* Global drag overlay */}

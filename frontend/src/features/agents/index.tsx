@@ -5,8 +5,6 @@ import { useTableList } from '@/hooks/use-table-list'
 import { useModelListByMode, type ModelInfo, type ActionStep, type ReportContent as ReportContentType } from '@/hooks/use-analysis'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
-import { ThemeSwitch } from '@/components/theme-switch'
-import { Setting } from '@/components/setting'
 import { WorkflowStepTracker, deriveVisibleSteps } from '@/components/agents/WorkflowStepTracker'
 import { AnalyzeBlock, CodeBlockStream, AnswerBlock, StreamingAnswerBlock } from '@/components/agents/MessageStream'
 import { SQLApprovalModal } from '@/components/agents/SQLApprovalModal'
@@ -816,15 +814,11 @@ export default function AgentsPage() {
     <>
       {/* Header: "Assistant" title per spec */}
       <Header fixed>
-        <div className='flex flex-col justify-center ml-2'>
+        <div className='flex flex-col justify-center'>
           <span className='font-semibold text-sm leading-tight'>Assistant</span>
           <span className='text-[11px] text-muted-foreground leading-tight'>
             The center stages focused on chat, streaming analysis, and quick actions.
           </span>
-        </div>
-        <div className='ml-auto flex items-center space-x-4'>
-          <ThemeSwitch />
-          <Setting />
         </div>
       </Header>
 

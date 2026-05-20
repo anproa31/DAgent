@@ -2,9 +2,6 @@ import { useParams } from '@tanstack/react-router'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import Split from 'react-split'
 import { Main } from '@/components/layout/main'
-import { Header } from '@/components/layout/header'
-import { ThemeSwitch } from '@/components/theme-switch'
-import { Setting } from '@/components/setting'
 import { LoaderCircle, AlertCircle, Pencil, Copy, Check } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useReport, useGetSpace, type ActionStep } from '@/hooks/use-analysis'
@@ -465,16 +462,6 @@ export default function AnalysisReport() {
     restoreScrollPosition();
   }, [sidePanelContent]);
 
-  // Common header
-  const headerElement = (
-    <Header>
-      <div className='ml-auto flex items-center space-x-4'>
-  <ThemeSwitch />
-  <Setting />
-      </div>
-    </Header>
-  )
-
   // Determine main content
   let mainContent: React.ReactNode
 
@@ -600,7 +587,6 @@ export default function AnalysisReport() {
 
   return (
     <>
-      {headerElement}
       <Main className={`relative ${space && space.analysis_ids.length > 0 ? "p-0 h-[calc(100vh-60px)]" : ""}`}>
         {mainContent}
       </Main>

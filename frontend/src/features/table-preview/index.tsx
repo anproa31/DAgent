@@ -21,8 +21,6 @@ import {
 import { Button } from '@/components/ui/button'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
-import { ThemeSwitch } from '@/components/theme-switch'
-import { Setting } from '@/components/setting'
 import { InfiniteTableDataTable } from './components/infinite-table-data-table'
 import { createTableColumns } from './components/table-columns'
 
@@ -129,10 +127,6 @@ export default function TablePreview() {
             </Button>
             <h1 className='text-lg font-semibold'>{tableName}</h1>
           </div>
-          <div className='ml-auto flex items-center space-x-4'>
-            <ThemeSwitch />
-            <Setting />
-          </div>
         </Header>
         <Main>
           <div className='flex h-[400px] items-center justify-center'>
@@ -151,12 +145,6 @@ export default function TablePreview() {
   if (error || !firstPage) {
     return (
       <>
-        <Header fixed>
-          <div className='ml-auto flex items-center space-x-4'>
-            <ThemeSwitch />
-            <Setting />
-          </div>
-        </Header>
         <Main>
           <div className='flex h-[400px] items-center justify-center'>
             <div className='text-center'>
@@ -184,13 +172,6 @@ export default function TablePreview() {
 
   return (
     <>
-      <Header fixed>
-        <div className='ml-auto flex items-center space-x-4'>
-          <ThemeSwitch />
-          <Setting />
-        </div>
-      </Header>
-
       <Main>
         <div className='mb-2 flex flex-col space-y-2 gap-x-4'>
           <div>

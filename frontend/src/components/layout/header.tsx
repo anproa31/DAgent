@@ -1,7 +1,5 @@
 import React from 'react'
 import { cn } from '@/lib/utils'
-import { Separator } from '@/components/ui/separator'
-import { SidebarTrigger } from '@/components/ui/sidebar'
 
 interface HeaderProps extends React.HTMLAttributes<HTMLElement> {
   fixed?: boolean
@@ -21,10 +19,8 @@ export const Header = ({
       setOffset(document.body.scrollTop || document.documentElement.scrollTop)
     }
 
-    // Add scroll listener to the body
     document.addEventListener('scroll', onScroll, { passive: true })
 
-    // Clean up the event listener on unmount
     return () => document.removeEventListener('scroll', onScroll)
   }, [])
 
@@ -38,8 +34,6 @@ export const Header = ({
       )}
       {...props}
     >
-      <SidebarTrigger variant='outline' className='scale-125 sm:scale-100' />
-      <Separator orientation='vertical' className='h-6' />
       {children}
     </header>
   )
