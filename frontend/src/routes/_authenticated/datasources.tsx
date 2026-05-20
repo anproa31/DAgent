@@ -24,7 +24,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { DatabaseConnectionModal } from '@/components/layout/database-connection-modal'
+import { DatabaseConnectionModal } from '@/features/datasources/components/database-connection-modal'
 
 const DatasourceTypeIcon = ({ type }: { type: DatasourceType }) => {
   if (type === 'csv') {

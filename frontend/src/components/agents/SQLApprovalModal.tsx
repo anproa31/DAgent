@@ -55,7 +55,7 @@ export function SQLApprovalModal({
 
   return (
     <Dialog open={open}>
-      <DialogContent className='max-w-2xl' showCloseButton={false}>
+      <DialogContent className='max-w-2xl'>
         <DialogHeader>
           <DialogTitle className='flex items-center gap-2'>
             <Badge variant='outline' className='text-amber-600 border-amber-400'>
