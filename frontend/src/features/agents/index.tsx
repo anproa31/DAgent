@@ -380,7 +380,9 @@ export default function AgentsPage() {
         </div>
       </Header>
 
-      <Main className={`relative ${runs.length > 0 ? 'p-0 h-[calc(100vh-60px)]' : ''}`}>
+      <Main
+        className={`relative ${runs.length > 0 ? 'flex min-h-0 p-0 h-[calc(100vh-60px)] overflow-hidden' : ''} ${sidePanelContent ? 'flex-row' : ''}`}
+      >
         {runs.length === 0 ? (
           <div className='mx-auto max-w-4xl flex flex-col items-center pt-[calc(50vh-200px)] px-4'>
             <div className='mb-6 text-center'>
@@ -399,31 +401,44 @@ export default function AgentsPage() {
             </div>
           </div>
         ) : (
-          <div className='relative h-full'>
-            <div ref={scrollContainerRef} className='h-full overflow-auto pb-24'>
-              <div className='space-y-6 mb-[100px] pt-4'>
-                {runs.map((run, index) => {
-                  const isLast = index === runs.length - 1
-                  return (
-                    <div key={run.runId} ref={isLast ? latestItemRef : undefined}>
-                      <AgentRunItem
-                        run={run}
-                        runIndex={index}
-                        onShowSidePanel={(c) => setSidePanelContent(c)}
-                        onEditPrompt={handleEditPrompt}
-                        onBeginEditPrompt={handleStopForEdit}
-                        canEdit
-                      />
-                    </div>
-                  )
-                })}
+          <>
+            <div className='relative flex min-h-0 min-w-0 flex-1 flex-col'>
+              <div ref={scrollContainerRef} className='min-h-0 flex-1 overflow-auto pb-24'>
+                <div className='space-y-6 mb-[100px] pt-4'>
+                  {runs.map((run, index) => {
+                    const isLast = index === runs.length - 1
+                    return (
+                      <div key={run.runId} ref={isLast ? latestItemRef : undefined}>
+                        <AgentRunItem
+                          run={run}
+                          runIndex={index}
+                          onShowSidePanel={(c) => setSidePanelContent(c)}
+                          onEditPrompt={handleEditPrompt}
+                          onBeginEditPrompt={handleStopForEdit}
+                          canEdit
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className='sticky bottom-5 w-full shrink-0 flex justify-center px-4'>
+                <div className='w-full max-w-3xl'>{composer}</div>
               </div>
             </div>
 
-            <div className='sticky bottom-5 w-full flex justify-center px-4'>
-              <div className='w-full max-w-3xl'>{composer}</div>
-            </div>
-          </div>
+            {sidePanelContent && (
+              <div className='flex h-full w-[min(50%,560px)] min-w-[320px] shrink-0 flex-col overflow-hidden border-l bg-muted/30'>
+                <SidePanel
+                  type={sidePanelContent.type}
+                  content={sidePanelContent.content}
+                  stepData={sidePanelContent.stepData}
+                  onClose={() => setSidePanelContent(null)}
+                />
+              </div>
+            )}
+          </>
         )}
       </Main>
 
@@ -434,17 +449,6 @@ export default function AgentsPage() {
         onApprove={handleApproveSQL}
         onReject={handleRejectSQL}
       />
-
-      {sidePanelContent && (
-        <div className='fixed top-16 bottom-0 right-0 z-40 flex w-[480px] min-w-0 flex-col overflow-hidden border-l bg-background shadow-xl'>
-          <SidePanel
-            type={sidePanelContent.type}
-            content={sidePanelContent.content}
-            stepData={sidePanelContent.stepData}
-            onClose={() => setSidePanelContent(null)}
-          />
-        </div>
-      )}
     </>
   )
 }
