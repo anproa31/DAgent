@@ -1,5 +1,5 @@
 import { useMemo, useCallback } from 'react'
-import { IconDatabase, IconPlus, IconBrain } from '@tabler/icons-react'
+import { IconDatabase, IconPlus, IconClock } from '@tabler/icons-react'
 import { useTableList } from '@/hooks/use-table-list'
 import { deleteSession } from '@/api/agentApi'
 import { DATASOURCE_TYPE_LABELS } from '@/api/datasources'
@@ -78,15 +78,9 @@ export const useSidebarData = (): {
           ],
         },
         {
-          title: 'Analysis',
-          icon: IconBrain,
+          title: 'History',
+          icon: IconClock,
           items: [
-          {
-            title: 'New Analysis',
-            url: '/agents' as any,
-            search: {} as Record<string, unknown>,
-            icon: IconPlus,
-          },
           ...history
             .filter((item: AnalysisHistoryItem) => item.kind === 'agent')
             .map((item: AnalysisHistoryItem) => ({

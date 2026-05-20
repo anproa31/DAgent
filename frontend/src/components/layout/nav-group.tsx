@@ -74,7 +74,7 @@ export function NavGroup({
   const href = useLocation({ select: (location) => location.href })
 
   const databaseItem = items.find(item => item.title === 'Database')
-  const analysisItem = items.find(item => item.title === 'Analysis')
+  const historyItem = items.find(item => item.title === 'History')
 
   const isCollapsed = state === 'collapsed' && !isMobile
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null)
@@ -122,14 +122,14 @@ export function NavGroup({
 
       {!isCollapsed && <SidebarSeparator className='my-2' />}
 
-      {/* Analysis section - scrollable history */}
-      {analysisItem && (
+      {/* History section - scrollable history */}
+      {historyItem && (
         <>
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton className='h-8 pointer-events-none'>
-                {analysisItem.icon && <analysisItem.icon />}
-                {!isCollapsed && <span>Analysis</span>}
+                {historyItem.icon && <historyItem.icon />}
+                {!isCollapsed && <span>History</span>}
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
@@ -137,7 +137,7 @@ export function NavGroup({
             <>
               <div className='overflow-auto min-h-0 flex-1 max-h-[calc(100vh-300px)]'>
                 <SidebarMenu>
-                  {analysisItem.items.map((subItem) => {
+                  {historyItem.items.map((subItem) => {
                     const key = `${subItem.title}-${'url' in subItem ? subItem.url : subItem.action}`
 
                     return (
@@ -184,7 +184,7 @@ export function NavGroup({
                   open={!!deleteTarget}
                   onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
                   onConfirm={() => {
-                    const targetItem = analysisItem?.items.find(
+                    const targetItem = historyItem?.items.find(
                       (s) => s.id === deleteTarget.id && s.onDelete
                     )
                     targetItem?.onDelete?.(deleteTarget.id)
