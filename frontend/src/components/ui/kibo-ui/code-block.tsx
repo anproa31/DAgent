@@ -185,11 +185,16 @@ const filenameIconMap = {
 const lineNumberClassNames = cn(
   '[&_code]:[counter-reset:line]',
   '[&_code]:[counter-increment:line_0]',
+  '[&_.line]:relative',
+  '[&_.line]:block',
+  '[&_.line]:pl-10',
+  '[&_.line]:before:absolute',
+  '[&_.line]:before:left-0',
+  '[&_.line]:before:top-0',
   '[&_.line]:before:content-[counter(line)]',
-  '[&_.line]:before:inline-block',
   '[&_.line]:before:[counter-increment:line]',
-  '[&_.line]:before:w-4',
-  '[&_.line]:before:mr-4',
+  '[&_.line]:before:w-8',
+  '[&_.line]:before:pr-3',
   '[&_.line]:before:text-[13px]',
   '[&_.line]:before:text-right',
   '[&_.line]:before:text-muted-foreground/50',
@@ -244,16 +249,14 @@ const codeBlockClassName = cn(
   '[&_.shiki]:!bg-[var(--shiki-bg)]',
   '[&_code]:w-full',
   '[&_code]:block',
+  '[&_pre]:overflow-x-auto',
   '[&_code]:overflow-visible',
-  '[&_code]:break-words',
-  '[&_code]:break-all',
   '[&_pre]:whitespace-pre-wrap',
   '[&_pre]:text-xs',
   '[&_code]:text-xs',
   '[&_code]:bg-transparent',
-  '[&_.line]:px-4',
-  '[&_.line]:w-full',
-  '[&_.line]:relative'
+  '[&_.line]:pr-4',
+  '[&_.line]:w-full'
 )
 const highlight = (
   html: string,
@@ -488,8 +491,8 @@ export const CodeBlockCopyButton = ({
 type CodeBlockFallbackProps = HTMLAttributes<HTMLDivElement>
 const CodeBlockFallback = ({ children, ...props }: CodeBlockFallbackProps) => (
   <div {...props}>
-    <pre className='w-full break-words whitespace-pre-wrap'>
-      <code className='break-words'>
+    <pre className='w-full whitespace-pre-wrap py-4 text-xs'>
+      <code>
         {children
           ?.toString()
           .split('\n')
@@ -574,10 +577,10 @@ export const CodeBlockContent = ({
   }
   return (
     <div
-      style={{ overflowWrap: 'break-word', wordBreak: 'break-all' }}
+      style={{ overflowWrap: 'anywhere' }}
       dangerouslySetInnerHTML={{ __html: html }}
       {...props}
-      className={cn('whitespace-pre-wrap break-words', className)}
+      className={cn('whitespace-pre-wrap', className)}
     />
   )
 }
