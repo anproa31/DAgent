@@ -1,15 +1,19 @@
 """FastAPI application factory and lifecycle hooks."""
 from __future__ import annotations
 
+import asyncio
+
 import infrastructure.matplotlib_backend  # noqa: F401  (must run before pyplot imports)
 
 from fastapi import FastAPI
 
 from api.routes import datasources, execution, sessions, system
+from control_layer import get_control_layer
 from datasources.bootstrap import bootstrap_from_app
+from infrastructure.config import SESSION_CLEANUP_INTERVAL, SESSION_IDLE_SECONDS
 from infrastructure.duckdb import shutdown as duckdb_shutdown
 from infrastructure.duckdb import startup as duckdb_startup
-from infrastructure.logging_setup import configure_logging
+from infrastructure.logging_setup import configure_logging, logger
 
 
 def create_app() -> FastAPI:
@@ -32,5 +36,21 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     async def bootstrap_datasources() -> None:
         await bootstrap_from_app()
+
+    @app.on_event("startup")
+    async def start_session_cleanup() -> None:
+        async def _cleanup_loop() -> None:
+            while True:
+                await asyncio.sleep(SESSION_CLEANUP_INTERVAL)
+                try:
+                    cleaned = get_control_layer().runtime.cleanup_expired_sessions(
+                        SESSION_IDLE_SECONDS
+                    )
+                    if cleaned:
+                        logger.info("cleaned %d expired sandbox session(s)", cleaned)
+                except Exception as exc:
+                    logger.warning("session cleanup failed: %s", exc)
+
+        asyncio.create_task(_cleanup_loop())
 
     return app

@@ -14,7 +14,14 @@ def to_http_response(result: ExecutionResult) -> Dict[str, Any]:
             return {"ok": result.output}
         return {"ok": True}
 
-    response: Dict[str, Any] = {"error": result.error or result.output or "Execution failed"}
+    if result.status == ExecutionStatus.TIMEOUT:
+        response: Dict[str, Any] = {
+            "error": result.error or result.output or "Execution timed out",
+            "timeout": True,
+        }
+    else:
+        response = {"error": result.error or result.output or "Execution failed"}
+
     if "trace" in result.payload:
         response["trace"] = result.payload["trace"]
     if "id" in result.payload:

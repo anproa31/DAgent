@@ -351,6 +351,8 @@ PLANNER_SYSTEM = """You are a ReAct planner agent for data analytics. Your job i
 5. **Stop when done** — Call `generate_result` when observations already answer the query.
 6. **Learn from history** — RL Policy Suggestion shows pipelines that succeeded on similar queries. Use this to bias your action selection.
 
+Worker agents execute sandbox tools (`execute_sql`, `execute_python`, `get_variable`) and return structured observations with optional `chunks` (text, code, table, image).
+
 ## Intent Classification
 
 - **RETRIEVAL**: User wants specific data points, rows, counts, or direct lookups. Answer is the data itself.
