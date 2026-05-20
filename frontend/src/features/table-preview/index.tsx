@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
-import { useParams, useNavigate } from '@tanstack/react-router'
-import { IconDatabase, IconRefresh, IconTrash } from '@tabler/icons-react'
+import { useParams, useNavigate, Link } from '@tanstack/react-router'
+import { IconChevronLeft, IconDatabase, IconRefresh, IconTrash } from '@tabler/icons-react'
 import { toast } from 'sonner'
 import {
   useInfiniteTableData,
@@ -121,7 +121,12 @@ export default function TablePreview() {
     return (
       <>
         <Header fixed>
-          <div className='flex items-center gap-4'>
+          <div className='flex items-center gap-2'>
+            <Button variant='ghost' size='icon' asChild className='-ml-2'>
+              <Link to='/datasources' aria-label='Back to datasources'>
+                <IconChevronLeft size={20} />
+              </Link>
+            </Button>
             <h1 className='text-lg font-semibold'>{tableName}</h1>
           </div>
           <div className='ml-auto flex items-center space-x-4'>
@@ -190,6 +195,11 @@ export default function TablePreview() {
         <div className='mb-2 flex flex-col space-y-2 gap-x-4'>
           <div>
             <div className='mb-2 flex items-center space-x-2'>
+              <Button variant='ghost' size='icon' asChild className='-ml-2'>
+                <Link to='/datasources' aria-label='Back to datasources'>
+                  <IconChevronLeft size={24} />
+                </Link>
+              </Button>
               <h2 className='text-2xl font-bold tracking-tight'>{tableName}</h2>
             </div>
           </div>
