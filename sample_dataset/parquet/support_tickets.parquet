@@ -1,0 +1,11 @@
+ticket_id,customer_id,subject,priority,status,created_at,resolved_at
+T001,1,Login issue not working,high,open,2026-05-18 09:00:00,
+T002,2,Billing question about invoice,low,open,2026-05-18 10:30:00,
+T003,3,Product damaged during shipping,critical,closed,2026-05-17 08:00:00,2026-05-17 14:00:00
+T004,4,Feature request for mobile app,low,in_progress,2026-05-17 11:00:00,
+T005,5,Account locked after failed attempts,medium,closed,2026-05-16 15:00:00,2026-05-16 16:30:00
+T006,6,Password reset email not received,high,open,2026-05-18 14:00:00,
+T007,7,Refund status inquiry,medium,in_progress,2026-05-18 08:00:00,
+T008,8,Payment method update,medium,open,2026-05-18 11:00:00,
+T009,9,Shipping delay complaint,high,closed,2026-05-17 10:00:00,2026-05-17 16:00:00
+T010,10,Account deletion request,low,in_progress,2026-05-18 09:30:00,

@@ -1,9 +1,3 @@
-You have been provided with four interconnected datasets representing our company's workforce health:
-1. `HR Employee data.csv` (Core demographics, tenure, and compensation metrics)
-2. `Employee_office_survey.csv` (Workplace sentiment and satisfaction metrics)
-3. `Job_position_structure.csv` (Job level and role architecture)
-4. `Office_codes.csv` (Geographic location maps and branch office sizes)
-
 ### Objective:
 Conduct a comprehensive "Workforce Experience and Cost-Efficiency Optimization Study." We want to understand if employee workplace satisfaction deeply correlates with organizational demographics, costs, and branch locations.
 
