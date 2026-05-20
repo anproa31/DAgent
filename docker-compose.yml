@@ -74,6 +74,8 @@ services:
     restart: unless-stopped
     ports:
       - "3030:3000"
+    volumes:
+      - ./sample_dataset:/sample_dataset
     environment:
       - NODE_ENV=production
 
