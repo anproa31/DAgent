@@ -60,4 +60,10 @@ def _default_summary(tool_name: str, result: ToolResult) -> str:
         return "Python code executed successfully"
     if tool_name == "get_variable":
         return f"Retrieved variable '{result.data.get('variable_name', '')}'"
+    if tool_name in ("discover_web_data", "fetch_web_data", "register_web_data"):
+        views = result.data.get("view_names") or []
+        return f"Web discovery registered {len(views)} view(s)"
+    if tool_name == "propose_web_data":
+        urls = result.data.get("selected_urls") or []
+        return f"Proposed {len(urls)} web dataset URL(s) for approval"
     return f"{tool_name} completed"

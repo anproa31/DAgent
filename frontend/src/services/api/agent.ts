@@ -81,6 +81,22 @@ export interface SqlGeneratedEvent {
   query: string
 }
 
+export interface WebDiscoverCandidate {
+  title: string
+  url: string
+  snippet?: string
+  score?: number
+  reason?: string
+}
+
+export interface WebDatasourceProposal {
+  query: string
+  reason: string
+  selected_urls: string[]
+  candidates: WebDiscoverCandidate[]
+  proposed_name?: string
+}
+
 export interface AnswerChunkEvent {
   content: string
 }
@@ -146,11 +162,12 @@ export const startRun = async (
 
 export const approveSQL = async (
   runId: string,
-  sql?: string
+  sql?: string,
+  opts?: { selected_urls?: string[]; name?: string }
 ): Promise<{ success: boolean }> => {
   const res = await agentClient.post<{ success: boolean }>(
     `/agent/runs/${runId}/approve`,
-    { sql }
+    { sql, selected_urls: opts?.selected_urls, name: opts?.name }
   )
   return res.data
 }
@@ -158,11 +175,12 @@ export const approveSQL = async (
 export const rejectSQL = async (
   runId: string,
   reason: string,
-  sql?: string
+  sql?: string,
+  selected_urls?: string[]
 ): Promise<{ success: boolean }> => {
   const res = await agentClient.post<{ success: boolean }>(
     `/agent/runs/${runId}/reject`,
-    { reason, sql }
+    { reason, sql, selected_urls }
   )
   return res.data
 }
@@ -208,6 +226,7 @@ export interface SSEHandlers {
   onThinking?: (data: ThinkingEvent) => void
   onAgentUpdate?: (data: AgentUpdateEvent) => void
   onSqlGenerated?: (data: SqlGeneratedEvent) => void
+  onWebDatasourceProposed?: (data: WebDatasourceProposal) => void
   onAnswerChunk?: (data: AnswerChunkEvent) => void
   onTitleUpdated?: (data: TitleUpdatedEvent) => void
   onDone?: (data: DoneEvent) => void
@@ -237,6 +256,10 @@ export function streamRun(runId: string, handlers: SSEHandlers): EventSource {
 
   es.addEventListener('sql_generated', (e: MessageEvent) => {
     handlers.onSqlGenerated?.(parse(e.data))
+  })
+
+  es.addEventListener('web_datasource_proposed', (e: MessageEvent) => {
+    handlers.onWebDatasourceProposed?.(parse(e.data))
   })
 
   es.addEventListener('answer_chunk', (e: MessageEvent) => {

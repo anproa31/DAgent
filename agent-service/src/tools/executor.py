@@ -21,6 +21,10 @@ async def run_tool(session_id: str, name: str, **kwargs: Any) -> ToolResult:
         for param in tool.parameters.values()
         if param.required and kwargs.get(param.name) in (None, "")
     ]
+    if name in ("discover_web_data", "propose_web_data") and not kwargs.get("query") and not kwargs.get("url"):
+        missing.append("query")
+    if name == "register_web_data" and not kwargs.get("urls"):
+        missing.append("urls")
     if missing:
         msg = f"Missing required parameters: {', '.join(missing)}"
         return ToolResult(

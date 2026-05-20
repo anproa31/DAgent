@@ -73,28 +73,48 @@ async def stream_run(run_id: str):
 
 
 @router.post("/runs/{run_id}/approve", response_model=ApproveResponse)
-async def approve_sql(run_id: str, body: ApproveRequest):
+async def approve_run(run_id: str, body: ApproveRequest):
     run = RUN_STATES.get(run_id)
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
 
-    sql = clean_sql_for_execution(body.sql or run.sql_draft or "")
-    run.approval_data = {"approved": True, "sql": sql}
-    run.sql_draft = sql
+    if run.pending_approval_type == "web_datasource_review":
+        proposal = run.web_discover_proposal or {}
+        selected = body.selected_urls or proposal.get("selected_urls") or []
+        run.approval_data = {
+            "approved": True,
+            "type": "web_datasource_review",
+            "selected_urls": selected,
+            "name": body.name or proposal.get("proposed_name"),
+        }
+    else:
+        sql = clean_sql_for_execution(body.sql or run.sql_draft or "")
+        run.approval_data = {"approved": True, "sql": sql, "type": "sql_review"}
+        run.sql_draft = sql
+
     run.approval_event.set()
     return ApproveResponse(success=True)
 
 
 @router.post("/runs/{run_id}/reject", response_model=RejectResponse)
-async def reject_sql(run_id: str, body: RejectRequest):
+async def reject_run(run_id: str, body: RejectRequest):
     run = RUN_STATES.get(run_id)
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
 
-    edited_sql = clean_sql_for_execution(body.sql if body.sql else run.sql_draft or "")
-    run.approval_data = {"approved": False, "reason": body.reason, "sql": edited_sql}
-    run.sql_draft = edited_sql
-    run.sql_rejection_reason = body.reason
+    if run.pending_approval_type == "web_datasource_review":
+        run.approval_data = {
+            "approved": False,
+            "type": "web_datasource_review",
+            "reason": body.reason,
+            "selected_urls": body.selected_urls or [],
+        }
+    else:
+        edited_sql = clean_sql_for_execution(body.sql if body.sql else run.sql_draft or "")
+        run.approval_data = {"approved": False, "reason": body.reason, "sql": edited_sql}
+        run.sql_draft = edited_sql
+        run.sql_rejection_reason = body.reason
+
     run.approval_event.set()
     return RejectResponse(success=True)
 

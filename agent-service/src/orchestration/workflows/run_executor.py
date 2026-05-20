@@ -29,6 +29,8 @@ class RunState:
         self.sql_draft: str = ""
         self.sql_explanation: str = ""
         self.sql_rejection_reason: str = ""
+        self.pending_approval_type: str = ""
+        self.web_discover_proposal: dict = {}
         self.insights: str = ""
         self.agent_steps: list = []
         self.error: str = ""
@@ -152,7 +154,7 @@ def _extract_interrupt_value(graph_state) -> dict:
 
 
 async def _handle_hitl_interrupt(run: RunState, config: dict) -> bool:
-    """Pause for SQL approval; return True if graph should continue resuming."""
+    """Pause for SQL or web-datasource approval; return True if graph should continue."""
     graph_state = compiled_graph.get_state(config)
     if not graph_state.next:
         return False
@@ -161,19 +163,29 @@ async def _handle_hitl_interrupt(run: RunState, config: dict) -> bool:
     if not interrupt_value:
         return False
 
-    run.sql_draft = interrupt_value.get("sql", run.sql_draft)
-    run.sql_explanation = interrupt_value.get("explanation", "")
+    interrupt_type = interrupt_value.get("type", "sql_review")
+    run.pending_approval_type = interrupt_type
 
-    await run.event_queue.put(
-        {
-            "event": "sql_generated",
-            "data": {
-                "sql": run.sql_draft,
-                "explanation": run.sql_explanation,
-                "query": run.query,
-            },
-        }
-    )
+    if interrupt_type == "web_datasource_review":
+        run.web_discover_proposal = interrupt_value
+        await run.event_queue.put(
+            {"event": "web_datasource_proposed", "data": interrupt_value}
+        )
+        resume_message = "Resuming analysis after web datasource approval..."
+    else:
+        run.sql_draft = interrupt_value.get("sql", run.sql_draft)
+        run.sql_explanation = interrupt_value.get("explanation", "")
+        await run.event_queue.put(
+            {
+                "event": "sql_generated",
+                "data": {
+                    "sql": run.sql_draft,
+                    "explanation": run.sql_explanation,
+                    "query": run.query,
+                },
+            }
+        )
+        resume_message = "Resuming analysis after SQL approval..."
 
     await run.approval_event.wait()
     run.approval_event.clear()
@@ -181,10 +193,7 @@ async def _handle_hitl_interrupt(run: RunState, config: dict) -> bool:
     await run.event_queue.put(
         {
             "event": "thinking",
-            "data": {
-                "message": "Resuming analysis after SQL approval...",
-                "agent": run.current_agent,
-            },
+            "data": {"message": resume_message, "agent": run.current_agent},
         }
     )
 
@@ -268,6 +277,9 @@ def build_initial_state(
         "sql_explanation": "",
         "sql_approved": False,
         "sql_rejection_reason": "",
+        "web_discover_proposal": {},
+        "web_discover_approved": False,
+        "web_discover_rejection_reason": "",
         "python_code": "",
         "data_summary": "",
         "result_var_names": [],

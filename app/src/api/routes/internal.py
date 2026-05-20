@@ -3,12 +3,40 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from ...datasource_registry import DatasourceRegistry
-from ..dependencies.services import get_datasource_registry
+from ...models.datasource import (
+    DiscoverWebDataRequest,
+    DiscoverWebDataResponse,
+    RegisterWebDataRequest,
+    WebDiscoverCandidate,
+)
+from ...application.services.web_discover_service import WebDiscoverService
+from ..dependencies.services import get_datasource_registry, get_web_discover_service
 
 router = APIRouter(prefix="/internal", tags=["internal"])
+
+
+def _discover_response(outcome, *, message: str) -> DiscoverWebDataResponse:
+    return DiscoverWebDataResponse(
+        query=outcome.query,
+        search_count=outcome.search_count,
+        candidates=[
+            WebDiscoverCandidate(
+                title=c.title,
+                url=c.url,
+                snippet=c.snippet,
+                score=c.score,
+                reason=c.reason,
+            )
+            for c in outcome.candidates
+        ],
+        selected_urls=outcome.selected_urls,
+        datasources=outcome.datasources,
+        errors=outcome.errors,
+        message=message,
+    )
 
 
 @router.get("/schema")
@@ -85,3 +113,86 @@ async def sandbox_bootstrap(
             }
         )
     return {"datasources": payload}
+
+
+@router.post("/web/propose", response_model=DiscoverWebDataResponse)
+async def internal_propose_web_data(
+    payload: DiscoverWebDataRequest,
+    discover: WebDiscoverService = Depends(get_web_discover_service),
+) -> DiscoverWebDataResponse:
+    """Search/rank dataset URLs without registering (for HITL approval)."""
+    outcome = await discover.propose(
+        payload.query,
+        model=payload.model,
+        base_url=payload.base_url,
+        api_key=payload.api_key,
+        direct_url=payload.url,
+        max_fetch_attempts=payload.max_results,
+    )
+    return _discover_response(
+        outcome,
+        message=(
+            f"Proposed {len(outcome.selected_urls)} dataset URL(s) for approval"
+            if outcome.selected_urls
+            else "No dataset URLs proposed"
+        ),
+    )
+
+
+@router.post("/web/register", response_model=DiscoverWebDataResponse)
+async def internal_register_web_data(
+    payload: RegisterWebDataRequest,
+    discover: WebDiscoverService = Depends(get_web_discover_service),
+) -> DiscoverWebDataResponse:
+    """Register user-approved dataset URLs."""
+    from ...application.services.prompt_service import get_prompt_service
+
+    if not payload.urls:
+        raise HTTPException(status_code=400, detail="At least one URL is required")
+
+    outcome = await discover.register_urls(
+        payload.urls,
+        name=payload.name,
+        query=payload.query or "web import",
+    )
+    if outcome.datasources:
+        get_prompt_service().refresh_schema_cache()
+
+    return _discover_response(
+        outcome,
+        message=(
+            f"Registered {len(outcome.datasources)} datasource(s)"
+            if outcome.datasources
+            else "Registration failed"
+        ),
+    )
+
+
+@router.post("/web/discover", response_model=DiscoverWebDataResponse)
+async def internal_discover_web_data(
+    payload: DiscoverWebDataRequest,
+    discover: WebDiscoverService = Depends(get_web_discover_service),
+) -> DiscoverWebDataResponse:
+    """One-shot discover + register (non-HITL)."""
+    from ...application.services.prompt_service import get_prompt_service
+
+    outcome = await discover.discover_and_register(
+        payload.query,
+        name=payload.name,
+        model=payload.model,
+        base_url=payload.base_url,
+        api_key=payload.api_key,
+        direct_url=payload.url,
+        max_fetch_attempts=payload.max_results,
+    )
+    if outcome.datasources:
+        get_prompt_service().refresh_schema_cache()
+
+    return _discover_response(
+        outcome,
+        message=(
+            f"Registered {len(outcome.datasources)} datasource(s) from web discovery"
+            if outcome.datasources
+            else "No datasources registered"
+        ),
+    )

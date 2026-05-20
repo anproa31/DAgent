@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 import type {
   AgentUpdateEvent,
   SqlGeneratedEvent,
+  WebDatasourceProposal,
   DoneEvent,
   AnswerChunkEvent,
 } from '@/services/api/agent'
@@ -19,6 +20,24 @@ export type RunPhase =
   /** User closed the SSE stream (stop button); backend may still be running. */
   | 'stopped'
 
+export type ApprovalKind = 'sql' | 'web_datasource' | null
+
+export interface WebDiscoverCandidate {
+  title: string
+  url: string
+  snippet?: string
+  score?: number
+  reason?: string
+}
+
+export interface WebDatasourceProposal {
+  query: string
+  reason: string
+  selected_urls: string[]
+  candidates: WebDiscoverCandidate[]
+  proposed_name?: string
+}
+
 export interface AgentRun {
   runId: string
   sessionId: string
@@ -27,9 +46,11 @@ export interface AgentRun {
   currentAgent: string
   agentSteps: string[]
   thinkingMessage: string
-  // HITL
+  approvalKind: ApprovalKind
+  // HITL SQL
   pendingSql: string
   pendingSqlExplanation: string
+  pendingWebProposal: WebDatasourceProposal | null
   // Streaming answer (token/chunk accumulator while phase is active)
   streamingAnswer: string
   // Results
@@ -66,6 +87,7 @@ interface AgentStore {
   setThinking: (runId: string, message: string, agent: string) => void
   handleAgentUpdate: (runId: string, data: AgentUpdateEvent) => void
   handleSqlGenerated: (runId: string, data: SqlGeneratedEvent) => void
+  handleWebDatasourceProposed: (runId: string, data: WebDatasourceProposal) => void
   updatePendingSql: (runId: string, sql: string) => void
   handleAnswerChunk: (runId: string, data: AnswerChunkEvent) => void
   handleDone: (runId: string, data: DoneEvent) => void
@@ -128,8 +150,10 @@ export const useAgentStore = create<AgentStore>()(
           currentAgent: '',
           agentSteps: [],
           thinkingMessage: 'Starting analysis...',
+          approvalKind: null,
           pendingSql: '',
           pendingSqlExplanation: '',
+          pendingWebProposal: null,
           streamingAnswer: '',
           content: [],
           insights: '',
@@ -173,8 +197,21 @@ export const useAgentStore = create<AgentStore>()(
         set((s) => ({
           runs: updateRun(s.runs, runId, {
             phase: 'awaiting_approval',
+            approvalKind: 'sql',
             pendingSql: data.sql,
             pendingSqlExplanation: data.explanation,
+            pendingWebProposal: null,
+          }),
+        })),
+
+      handleWebDatasourceProposed: (runId, data) =>
+        set((s) => ({
+          runs: updateRun(s.runs, runId, {
+            phase: 'awaiting_approval',
+            approvalKind: 'web_datasource',
+            pendingWebProposal: data,
+            pendingSql: '',
+            pendingSqlExplanation: '',
           }),
         })),
 
@@ -244,6 +281,8 @@ export const useAgentStore = create<AgentStore>()(
               agentSteps: [],
               pendingSql: '',
               pendingSqlExplanation: '',
+              pendingWebProposal: null,
+              approvalKind: null,
             }),
             activeRunId,
             cancelledRunIds: nextCancelled,

@@ -131,26 +131,59 @@ class DatasourceRegistry:
             shutil.rmtree(ds_dir, ignore_errors=True)
             raise
 
+        except Exception:
+            shutil.rmtree(ds_dir, ignore_errors=True)
+            raise
+
+        return await self.add_fetched_file_datasource(
+            name=Path(upload.filename).stem,
+            stored_path=stored_path,
+            original_filename=upload.filename,
+            file_type=file_type,
+            source_url=None,
+            datasource_id=datasource_id,
+        )
+
+    async def add_fetched_file_datasource(
+        self,
+        *,
+        name: str,
+        stored_path: str,
+        original_filename: str,
+        file_type: DatasourceFileType,
+        source_url: Optional[str] = None,
+        datasource_id: Optional[str] = None,
+    ) -> DatasourceRecord:
+        ds_id = datasource_id or str(uuid.uuid4())
+        ds_dir = os.path.dirname(stored_path)
+
         try:
             outcome = introspect_file_datasource(
-                name=Path(upload.filename).stem,
+                name=name,
                 file_type=file_type.value,
                 file_path=stored_path,
             )
         except Exception as exc:
-            shutil.rmtree(ds_dir, ignore_errors=True)
+            if os.path.isdir(ds_dir) and ds_dir.startswith(self._repo.files_dir):
+                shutil.rmtree(ds_dir, ignore_errors=True)
             raise HTTPException(status_code=400, detail=f"Introspection failed: {exc}") from exc
 
-        outcome.context_markdown = await self._context_engine.build_context(
-            Path(upload.filename).stem, outcome
-        )
+        outcome.context_markdown = await self._context_engine.build_context(name, outcome)
+
+        config: Dict[str, Any] = {
+            "path": stored_path,
+            "original_filename": original_filename,
+        }
+        if source_url:
+            config["source_url"] = source_url
+            config["origin"] = "web_fetch"
 
         record = self._build_record(
-            datasource_id=datasource_id,
-            name=Path(upload.filename).stem,
+            datasource_id=ds_id,
+            name=name,
             kind=DatasourceKind.FILE,
             type_value=file_type.value,
-            config={"path": stored_path, "original_filename": upload.filename},
+            config=config,
             outcome=outcome,
         )
         self._repo.save(record)

@@ -6,6 +6,7 @@ import { useModelListByMode, type ModelInfo } from '@/hooks/use-analysis'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { SQLApprovalModal } from '@/components/agents/SQLApprovalModal'
+import { WebDatasourceApprovalModal } from '@/components/agents/WebDatasourceApprovalModal'
 import { SidePanel } from '@/features/analysis-report/components/side-panel'
 import { toast } from 'sonner'
 import {
@@ -347,10 +348,39 @@ export default function AgentsPage() {
     [approvalRun, setPhase]
   )
 
+  const handleRejectWebDatasource = useCallback(
+    async (reason: string) => {
+      if (!approvalRun) return
+      setPhase(approvalRun.runId, 'running')
+      try {
+        await rejectSQL(approvalRun.runId, reason)
+      } catch {
+        toast.error('Failed to send rejection')
+      }
+    },
+    [approvalRun, setPhase]
+  )
+
+  const handleApproveWebDatasource = useCallback(
+    async (selectedUrls: string[], name?: string) => {
+      if (!approvalRun) return
+      setPhase(approvalRun.runId, 'running')
+      try {
+        await approveSQL(approvalRun.runId, undefined, {
+          selected_urls: selectedUrls,
+          name,
+        })
+      } catch {
+        toast.error('Failed to send approval')
+      }
+    },
+    [approvalRun, setPhase]
+  )
+
   const isRunning = submitStatus !== 'ready'
   const models = modelData?.models ?? []
   const tableOptions = (tables ?? []).map((t) => ({ value: t.name, label: t.name }))
-  const canSubmit = !!query.trim() && !!model && !!tables?.length
+  const canSubmit = !!query.trim() && !!model
 
   const composer = (
     <AgentComposer
@@ -443,11 +473,18 @@ export default function AgentsPage() {
       </Main>
 
       <SQLApprovalModal
-        open={!!approvalRun}
+        open={!!approvalRun && approvalRun.approvalKind === 'sql'}
         sql={approvalRun?.pendingSql ?? ''}
         explanation={approvalRun?.pendingSqlExplanation ?? ''}
         onApprove={handleApproveSQL}
         onReject={handleRejectSQL}
+      />
+
+      <WebDatasourceApprovalModal
+        open={!!approvalRun && approvalRun.approvalKind === 'web_datasource'}
+        proposal={approvalRun?.pendingWebProposal ?? null}
+        onApprove={handleApproveWebDatasource}
+        onReject={handleRejectWebDatasource}
       />
     </>
   )
