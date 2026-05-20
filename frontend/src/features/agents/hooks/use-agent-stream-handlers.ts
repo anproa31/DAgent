@@ -19,6 +19,7 @@ export function useAgentStreamHandlers() {
     setThinking,
     handleAgentUpdate,
     handleSqlGenerated,
+    handleWebDatasourceProposed,
     handleAnswerChunk,
     handleDone,
     handleError,
@@ -46,6 +47,7 @@ export function useAgentStreamHandlers() {
         onThinking: (d) => setThinking(runId, d.message, d.agent),
         onAgentUpdate: (d) => handleAgentUpdate(runId, d),
         onSqlGenerated: (d) => handleSqlGenerated(runId, d),
+        onWebDatasourceProposed: (d) => handleWebDatasourceProposed(runId, d),
         onAnswerChunk: (d) => handleAnswerChunk(runId, d),
         onTitleUpdated: (d) => {
           if (d.session_id && d.title) {
@@ -70,6 +72,7 @@ export function useAgentStreamHandlers() {
       setThinking,
       handleAgentUpdate,
       handleSqlGenerated,
+      handleWebDatasourceProposed,
       handleAnswerChunk,
       handleDone,
       handleError,

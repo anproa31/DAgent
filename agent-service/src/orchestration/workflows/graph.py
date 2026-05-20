@@ -2,6 +2,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
 
 from agents.analysis.eda import eda_agent_node
+from agents.web_discover.node import web_discover_agent_node
 from agents.analysis.final_report import final_report_node
 from agents.analysis.insight import insight_agent_node
 from agents.analysis.viz import viz_agent_node
@@ -27,6 +28,7 @@ def build_graph():
     builder.add_node("sql", sql_agent_node)
     builder.add_node("code_executor", code_executor_node)
     builder.add_node("python", python_agent_node)
+    builder.add_node("web_discover", web_discover_agent_node)
     builder.add_node("eda", eda_agent_node)
     builder.add_node("insight", insight_agent_node)
     builder.add_node("viz", viz_agent_node)
@@ -42,6 +44,7 @@ def build_graph():
         {
             "sql": "sql",
             "python": "python",
+            "web_discover": "web_discover",
             "eda": "eda",
             "insight": "insight",
             "viz": "viz",
@@ -58,6 +61,7 @@ def build_graph():
         },
     )
     builder.add_edge("code_executor", "planner")
+    builder.add_edge("web_discover", "planner")
     builder.add_edge("python", "planner")
     builder.add_edge("eda", "planner")
     builder.add_edge("insight", "planner")

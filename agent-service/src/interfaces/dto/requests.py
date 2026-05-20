@@ -16,8 +16,11 @@ class StartRunRequest(BaseModel):
 
 class ApproveRequest(BaseModel):
     sql: Optional[str] = None  # optionally edited SQL
+    selected_urls: Optional[List[str]] = None
+    name: Optional[str] = None
 
 
 class RejectRequest(BaseModel):
     reason: str = "User rejected the generated SQL"
     sql: Optional[str] = None  # edited SQL that should be used for regeneration
+    selected_urls: Optional[List[str]] = None

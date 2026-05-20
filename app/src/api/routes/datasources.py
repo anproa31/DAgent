@@ -14,9 +14,18 @@ from ...models.datasource import (
     DatasourceListResponse,
     DatasourceRecord,
     DeleteDatasourceResponse,
+    DiscoverWebDataRequest,
+    DiscoverWebDataResponse,
+    FetchUrlDatasourceRequest,
+    WebDiscoverCandidate,
 )
 from ...models.responses import ConnectionResponse
-from ..dependencies.services import get_datasource_registry, get_prompt_service_dep
+from ..dependencies.services import (
+    get_datasource_registry,
+    get_prompt_service_dep,
+    get_web_discover_service,
+)
+from ...application.services.web_discover_service import WebDiscoverService
 
 router = APIRouter(tags=["datasources"])
 
@@ -91,6 +100,82 @@ async def connect_datasource(
     )
     prompts.refresh_schema_cache()
     return record
+
+
+@router.post("/api/datasources/fetch-url", response_model=DatasourceRecord)
+async def fetch_url_datasource(
+    payload: FetchUrlDatasourceRequest,
+    registry: DatasourceRegistry = Depends(get_datasource_registry),
+    prompts: PromptService = Depends(get_prompt_service_dep),
+) -> DatasourceRecord:
+    from ...application.services.web_fetch_service import fetch_url_to_file
+    from ...core.config import get_settings
+
+    settings = get_settings()
+    try:
+        fetched, _validation = await fetch_url_to_file(
+            payload.url,
+            max_bytes=settings.web_fetch_max_bytes,
+            timeout=settings.web_fetch_timeout,
+            allow_untrusted=settings.web_allow_untrusted,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Download failed: {exc}") from exc
+
+    name = payload.name or fetched.original_filename.rsplit(".", 1)[0]
+    record = await registry.add_fetched_file_datasource(
+        name=name,
+        stored_path=fetched.stored_path,
+        original_filename=fetched.original_filename,
+        file_type=fetched.file_type,
+        source_url=fetched.source_url,
+    )
+    prompts.refresh_schema_cache()
+    return record
+
+
+@router.post("/api/datasources/discover-web", response_model=DiscoverWebDataResponse)
+async def discover_web_datasources(
+    payload: DiscoverWebDataRequest,
+    discover: WebDiscoverService = Depends(get_web_discover_service),
+    prompts: PromptService = Depends(get_prompt_service_dep),
+) -> DiscoverWebDataResponse:
+    outcome = await discover.discover_and_register(
+        payload.query,
+        name=payload.name,
+        model=payload.model,
+        base_url=payload.base_url,
+        api_key=payload.api_key,
+        direct_url=payload.url,
+        max_fetch_attempts=payload.max_results,
+    )
+    if outcome.datasources:
+        prompts.refresh_schema_cache()
+
+    return DiscoverWebDataResponse(
+        query=outcome.query,
+        search_count=outcome.search_count,
+        candidates=[
+            WebDiscoverCandidate(
+                title=c.title,
+                url=c.url,
+                snippet=c.snippet,
+                score=c.score,
+                reason=c.reason,
+            )
+            for c in outcome.candidates
+        ],
+        selected_urls=outcome.selected_urls,
+        datasources=outcome.datasources,
+        errors=outcome.errors,
+        message=(
+            f"Registered {len(outcome.datasources)} datasource(s) from web discovery"
+            if outcome.datasources
+            else "No datasources registered"
+        ),
+    )
 
 
 @router.delete("/api/datasources/{datasource_id}", response_model=DeleteDatasourceResponse)

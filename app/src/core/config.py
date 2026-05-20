@@ -14,6 +14,11 @@ class Settings:
     host: str
     port: int
     reload: bool
+    web_fetch_max_bytes: int
+    web_fetch_timeout: float
+    web_discover_max_search: int
+    web_discover_max_fetch: int
+    web_allow_untrusted: bool
 
     @property
     def sandbox_url(self) -> str:
@@ -39,6 +44,11 @@ def get_settings() -> Settings:
         host=os.environ.get("HOST", "0.0.0.0"),
         port=int(os.environ.get("PORT", "8000")),
         reload=os.environ.get("RELOAD", "1") not in ("0", "false", "False"),
+        web_fetch_max_bytes=int(os.environ.get("WEB_FETCH_MAX_BYTES", str(50 * 1024 * 1024))),
+        web_fetch_timeout=float(os.environ.get("WEB_FETCH_TIMEOUT", "30")),
+        web_discover_max_search=int(os.environ.get("WEB_DISCOVER_MAX_SEARCH", "10")),
+        web_discover_max_fetch=int(os.environ.get("WEB_DISCOVER_MAX_FETCH", "3")),
+        web_allow_untrusted=os.environ.get("WEB_ALLOW_UNTRUSTED", "0") in ("1", "true", "True"),
     )
 
 

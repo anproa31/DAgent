@@ -100,3 +100,43 @@ class DatasourceListResponse(BaseModel):
 class DeleteDatasourceResponse(BaseModel):
     success: bool
     deleted_id: str
+
+
+class FetchUrlDatasourceRequest(BaseModel):
+    url: str
+    name: Optional[str] = None
+
+
+class DiscoverWebDataRequest(BaseModel):
+    query: str
+    name: Optional[str] = None
+    url: Optional[str] = None
+    """Optional direct URL — skips search when provided."""
+    model: Optional[str] = None
+    base_url: Optional[str] = None
+    api_key: Optional[str] = None
+    max_results: int = Field(default=3, ge=1, le=5)
+
+
+class WebDiscoverCandidate(BaseModel):
+    title: str
+    url: str
+    snippet: str = ""
+    score: int = 0
+    reason: str = ""
+
+
+class DiscoverWebDataResponse(BaseModel):
+    query: str
+    search_count: int = 0
+    candidates: List[WebDiscoverCandidate] = Field(default_factory=list)
+    selected_urls: List[str] = Field(default_factory=list)
+    datasources: List[DatasourceRecord] = Field(default_factory=list)
+    errors: List[str] = Field(default_factory=list)
+    message: str = ""
+
+
+class RegisterWebDataRequest(BaseModel):
+    urls: List[str]
+    name: Optional[str] = None
+    query: Optional[str] = None

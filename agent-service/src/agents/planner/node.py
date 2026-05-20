@@ -6,6 +6,7 @@ import json
 import re
 
 from agents.planner.history import compress_planner_history, format_rl_suggestion
+from agents.shared.web_discover_policy import should_use_discover_action
 from agents.reflection.memory import get_policy_suggestion
 from agents.shared.state import AgentState, PlannerStep
 from context.context_engine import get_enhanced_context
@@ -106,6 +107,8 @@ async def planner_node(state: AgentState) -> dict:
         for ds in datasources
     ) or "(no datasources registered)"
 
+    discover_allowed, discover_reason = should_use_discover_action(state)
+
     compressed_history = compress_planner_history(planner_history, keep_last_n=5)
     rl_suggestion = get_policy_suggestion(state.get("query", ""), state.get("intent", "RETRIEVAL"))
     rl_context = format_rl_suggestion(rl_suggestion) if rl_suggestion else "(No historical patterns available)"
@@ -116,6 +119,8 @@ async def planner_node(state: AgentState) -> dict:
             "role": "user",
             "content": (
                 f"Registered datasources:\n{datasources_summary}\n\n"
+                f"Web discovery allowed: {discover_allowed}\n"
+                f"Web discovery reason: {discover_reason or '(not needed — prefer sql/python on existing data)'}\n\n"
                 f"Datasource schema:\n{schema_info}\n\n"
                 f"Semantic context:\n{ctx}\n\n"
                 f"User query: {state['query']}\n\n"
@@ -161,10 +166,17 @@ async def planner_node(state: AgentState) -> dict:
     intent = decision.get("intent", state.get("intent", "RETRIEVAL")).upper()
     execution_mode = decision.get("execution_mode", state.get("execution_mode", "sql")).lower()
 
-    valid_actions = {"sql", "python", "eda", "insight", "viz", "generate_result", "finish"}
+    valid_actions = {"sql", "python", "discover_data", "eda", "insight", "viz", "generate_result", "finish"}
     if action not in valid_actions:
         logger.warning("invalid action %r, defaulting to sql", action)
         action = "sql"
+
+    if action == "discover_data" and not discover_allowed:
+        logger.info("discover_data blocked: %s", discover_reason)
+        action = "sql"
+        thought = (
+            f"{thought} [discover_data unavailable: {discover_reason}. Using sql instead.]"
+        ).strip()
 
     if execution_mode not in ("sql", "python"):
         execution_mode = "sql"

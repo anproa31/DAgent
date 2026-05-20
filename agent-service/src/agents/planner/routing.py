@@ -15,6 +15,7 @@ def route_after_planner(state: AgentState) -> str:
     action_to_node = {
         "sql": "sql",
         "python": "python",
+        "discover_data": "web_discover",
         "eda": "eda",
         "insight": "insight",
         "viz": "viz",

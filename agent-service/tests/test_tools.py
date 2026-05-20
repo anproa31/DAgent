@@ -19,6 +19,8 @@ class TestToolRegistry(unittest.TestCase):
         self.assertIn("execute_python", names)
         self.assertIn("execute_sql", names)
         self.assertIn("get_variable", names)
+        self.assertIn("discover_web_data", names)
+        self.assertIn("fetch_web_data", names)
 
     def test_format_tools_for_prompt_renders_schema(self) -> None:
         prompt = format_tools_for_prompt()
