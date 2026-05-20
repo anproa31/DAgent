@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { ChevronDown, Search, Terminal, FileCheck, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible'
-import { AIResponse } from '@/components/ui/kibo-ui/response'
+import { AIResponse } from '@/components/shared/kibo-ui/response'
 
 type StreamBlockStatus = 'idle' | 'generating' | 'done'
 

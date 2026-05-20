@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx'
 import { type ActionStep } from '@/hooks/use-analysis'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { AIResponse } from '@/components/ui/kibo-ui/response'
+import { AIResponse } from '@/components/shared/kibo-ui/response'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Table,

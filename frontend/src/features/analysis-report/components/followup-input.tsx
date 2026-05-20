@@ -10,7 +10,7 @@ import {
     AIInputToolbar,
     AIInputTools,
     AIInputMultiSelectTable
-} from '@/components/ui/kibo-ui/ai-input'
+} from '@/components/shared/kibo-ui/ai-input'
 import { Button } from '@/components/ui/button'
 import { SquareIcon } from 'lucide-react'
 import { type FormEventHandler } from 'react'

@@ -1,50 +1,16 @@
-import axios from 'axios'
 import {
   useQuery,
   useInfiniteQuery,
   useMutation,
   useQueryClient,
 } from '@tanstack/react-query'
+import {
+  fetchTableData,
+  deleteTable,
+  type TableDataParams,
+} from '@/services/api/tables'
 
-const API_BASE_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:8000'
-
-export interface TableDataResponse {
-  table_name: string
-  columns: string[]
-  data: Record<string, any>[]
-  total_rows: number
-  preview_rows: number
-}
-
-export interface TableDataParams {
-  limit?: number
-  offset?: number
-  sort_column?: string
-  sort_direction?: 'asc' | 'desc'
-  filter_column?: string
-  filter_value?: string
-}
-
-const fetchTableData = async (
-  tableName: string,
-  params: TableDataParams = {}
-): Promise<TableDataResponse> => {
-  const response = await axios.get<TableDataResponse>(
-    `${API_BASE_URL}/api/table-data/${encodeURIComponent(tableName)}`,
-    {
-      params,
-    }
-  )
-  return response.data
-}
-
-// Delete a DuckDB view (compat shim that removes the parent datasource).
-const deleteTable = async (tableName: string): Promise<void> => {
-  const response = await axios.delete(
-    `${API_BASE_URL}/api/delete-table/${encodeURIComponent(tableName)}`
-  )
-  return response.data
-}
+export type { TableDataResponse, TableDataParams } from '@/services/api/tables'
 
 export const useTableData = (
   tableName: string,
@@ -53,13 +19,12 @@ export const useTableData = (
   return useQuery({
     queryKey: ['tableData', tableName, params],
     queryFn: () => fetchTableData(tableName, params),
-    staleTime: 2 * 60 * 1000, // Cache for 2 minutes
+    staleTime: 2 * 60 * 1000,
     refetchOnWindowFocus: false,
-    enabled: !!tableName, // Only run query if tableName exists
+    enabled: !!tableName,
   })
 }
 
-// Hook for infinite scroll
 export const useInfiniteTableData = (
   tableName: string,
   baseParams: Omit<TableDataParams, 'offset'> = {}
@@ -69,7 +34,6 @@ export const useInfiniteTableData = (
     queryFn: ({ pageParam = 0 }) =>
       fetchTableData(tableName, { ...baseParams, offset: pageParam }),
     getNextPageParam: (lastPage, allPages) => {
-      // Check if there is a next page
       const totalFetched = allPages.reduce(
         (sum, page) => sum + page.preview_rows,
         0
@@ -83,7 +47,6 @@ export const useInfiniteTableData = (
   })
 }
 
-// Hook for table deletion
 export const useDeleteTable = () => {
   const queryClient = useQueryClient()
 

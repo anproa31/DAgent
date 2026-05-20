@@ -9,7 +9,7 @@ import {
 } from '@/context/analysis-history-context'
 import { useNavigate, useLocation } from '@tanstack/react-router'
 import { toast } from 'sonner'
-import Bars from '@/components/ui/shadcn-io/spinner/Bars'
+import { SidebarLoadingSpinner } from '@/components/shared/spinner/sidebar-loading-spinner'
 
 export const useSidebarData = (): {
   data: SidebarData | null
@@ -61,7 +61,7 @@ export const useSidebarData = (): {
       onDelete: (id: string) => handleDelete(id),
       onPinToggle: (id: string) => togglePin(id),
       isPinned: isPinned(item.id),
-      ...(item.isLoading ? { icon: Bars } : {}),
+      ...(item.isLoading ? { icon: SidebarLoadingSpinner } : {}),
     })
 
     const pinnedSet = new Set(pinnedIds)

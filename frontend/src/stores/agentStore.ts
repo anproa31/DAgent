@@ -1,6 +1,12 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
-import type { ReportBlock, AgentUpdateEvent, SqlGeneratedEvent, DoneEvent, AnswerChunkEvent } from '@/api/agentApi'
+import type {
+  AgentUpdateEvent,
+  SqlGeneratedEvent,
+  DoneEvent,
+  AnswerChunkEvent,
+} from '@/services/api/agent'
+import type { ReportBlock } from '@/types/report'
 
 export type RunPhase =
   | 'idle'

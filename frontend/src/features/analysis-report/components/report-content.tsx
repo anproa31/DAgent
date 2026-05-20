@@ -5,8 +5,8 @@ import {
 } from '@/hooks/use-analysis'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ImageZoom } from '@/components/ui/kibo-ui/image-zoom'
-import { AIResponse } from '@/components/ui/kibo-ui/response'
+import { ImageZoom } from '@/components/shared/kibo-ui/image-zoom'
+import { AIResponse } from '@/components/shared/kibo-ui/response'
 import {
   TableBody,
   TableCell,
