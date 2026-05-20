@@ -12,10 +12,12 @@ from sqlalchemy import create_engine, pool
 
 # parent dir is agent-service
 _ROOT = Path(__file__).resolve().parents[1]
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
+_SRC = _ROOT / "src"
+for p in (_SRC, _ROOT):
+    if str(p) not in sys.path:
+        sys.path.insert(0, str(p))
 
-from models.db import Base  # noqa: E402
+from interfaces.dto.db import Base  # noqa: E402
 
 config = context.config
 if config.config_file_name is not None:

@@ -1,10 +1,17 @@
+import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
+
+# Ensure `src/` is on the import path (local dev and Docker without PYTHONPATH).
+_SRC = Path(__file__).resolve().parent / "src"
+if str(_SRC) not in sys.path:
+    sys.path.insert(0, str(_SRC))
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import sessions_router, runs_router, title_router
 
-from database import init_db
+from infrastructure.database.connection import init_db
+from interfaces.api.routers import runs_router, sessions_router, title_router
 from utils.agent_logger import get_logger, setup_logging
 
 setup_logging()
