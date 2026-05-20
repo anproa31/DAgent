@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-import json
 
 from agents.planner.analytics_react_agent import MAX_PLANNER_STEPS, get_analytics_react_agent
+from agents.planner.context_builder import build_planner_context
 from agents.planner.history import format_rl_suggestion
 from agents.planner.plan_tracker import sync_plan_with_completed, update_completed_actions
 from agents.reflection.memory import get_policy_suggestion
@@ -81,6 +81,10 @@ async def planner_node(state: AgentState) -> dict:
     plan_context = format_plan_for_prompt(execution_plan, orchestration_mode)  # type: ignore[arg-type]
     remaining_steps = get_remaining_plan_summary(execution_plan)
 
+    # Planner reads summarised observations only — never raw worker data
+    # (solution.md §1 Fix 1/3, §8). Keeps the context window bounded.
+    observation_context = build_planner_context(state)
+
     task_context = (
         f"User query: {state['query']}\n\n"
         f"Intent: {state.get('intent', 'unknown')}\n"
@@ -92,7 +96,7 @@ async def planner_node(state: AgentState) -> dict:
         f"Execution plan:\n{plan_context}\n\n"
         f"Remaining plan steps: {', '.join(remaining_steps) or '(none)'}\n\n"
         f"Completed actions: {', '.join(completed_actions) or '(none)'}\n\n"
-        f"Last observation:\n{json.dumps(last_observation, indent=2) if last_observation else '(none)'}\n\n"
+        f"Observations (summaries only):\n{observation_context}\n\n"
         f"RL policy suggestion:\n{rl_context}\n\n"
         f"Step index: {planner_step_index} / {MAX_PLANNER_STEPS}"
     )

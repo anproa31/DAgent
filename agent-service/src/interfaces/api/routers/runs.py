@@ -87,6 +87,10 @@ async def approve_run(run_id: str, body: ApproveRequest):
             "selected_urls": selected,
             "name": body.name or proposal.get("proposed_name"),
         }
+    elif run.pending_approval_type == "python_review":
+        code = body.code or run.python_code or ""
+        run.approval_data = {"approved": True, "type": "python_review", "code": code}
+        run.python_code = code
     else:
         sql = clean_sql_for_execution(body.sql or run.sql_draft or "")
         run.approval_data = {"approved": True, "sql": sql, "type": "sql_review"}
@@ -109,6 +113,13 @@ async def reject_run(run_id: str, body: RejectRequest):
             "reason": body.reason,
             "selected_urls": body.selected_urls or [],
         }
+    elif run.pending_approval_type == "python_review":
+        run.approval_data = {
+            "approved": False,
+            "type": "python_review",
+            "reason": body.reason,
+            "code": body.code or run.python_code or "",
+        }
     else:
         edited_sql = clean_sql_for_execution(body.sql if body.sql else run.sql_draft or "")
         run.approval_data = {"approved": False, "reason": body.reason, "sql": edited_sql}
@@ -127,6 +138,7 @@ async def stop_run(run_id: str):
 
     run.done = True
     run.error = "stopped"
+    run.completion_reason = "user_cancelled"
     if run.approval_event.is_set():
         run.approval_event.clear()
     run.approval_data = {"approved": False, "reason": "User stopped the run"}

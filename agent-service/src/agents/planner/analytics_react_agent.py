@@ -13,6 +13,7 @@ from agents.planner.plan_tracker import resolve_planner_action
 from agents.shared.llm_endpoint import normalize_base_url
 from agents.shared.state import AgentState, PlannerStep
 from agents.shared.web_discover_policy import should_use_discover_action
+from config.settings import FORCED_EXIT_THRESHOLD
 
 MAX_PLANNER_STEPS = 15
 
@@ -120,6 +121,21 @@ class AnalyticsReActAgent(ReActAgent):
         if iteration >= self.max_iterations:
             return {
                 "thought": f"Max steps ({self.max_iterations}) reached — generating report.",
+                "action": "generate_result",
+                "action_input": {},
+            }
+
+        # Forced exit (solution.md §1 Fix 4): once the loop has spent enough
+        # steps without finishing, summarise with whatever data exists rather
+        # than risk an unbounded retry loop.
+        completed_actions = state.get("completed_actions") or []
+        has_data = any(a in ("sql", "python") for a in completed_actions)
+        if iteration >= FORCED_EXIT_THRESHOLD and has_data:
+            return {
+                "thought": (
+                    f"Reached {iteration} steps without finishing — compiling the "
+                    "report from the data gathered so far."
+                ),
                 "action": "generate_result",
                 "action_input": {},
             }

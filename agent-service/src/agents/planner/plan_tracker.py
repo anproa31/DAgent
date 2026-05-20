@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from typing import Any, Dict, List
 
 from agents.shared.state import AgentState
+from config.settings import LOOP_DETECTION_REPEAT, LOOP_DETECTION_WINDOW
 from orchestration.routing.plan import (
     OrchestrationMode,
     PlanStep,
@@ -74,6 +76,21 @@ def record_action_failure(plan: List[PlanStep], action: str) -> List[PlanStep]:
     return mark_plan_step_status(plan, action, "failed")
 
 
+def detect_action_loop(state: AgentState, proposed_action: str) -> bool:
+    """True when ``proposed_action`` is stuck repeating (solution.md §1 Fix 2).
+
+    Sliding window over recent planner steps: if the same action already ran
+    ``LOOP_DETECTION_REPEAT`` times within the last ``LOOP_DETECTION_WINDOW``
+    steps, the planner is looping and must be forced to make progress.
+    """
+    if proposed_action in ("generate_result", "finish"):
+        return False
+    history: List[Dict[str, Any]] = state.get("planner_history") or []
+    recent = history[-LOOP_DETECTION_WINDOW:]
+    counts = Counter(step.get("action") for step in recent)
+    return counts.get(proposed_action, 0) >= LOOP_DETECTION_REPEAT
+
+
 def resolve_planner_action(
     state: AgentState,
     llm_action: str,
@@ -84,6 +101,13 @@ def resolve_planner_action(
     mode: OrchestrationMode = state.get("orchestration_mode", "AUTO_PLAN")  # type: ignore[assignment]
     plan = state.get("execution_plan") or []
     next_planned = get_next_planned_action(plan)
+
+    # Loop breaker runs before mode logic so it also applies in EXPLORE.
+    if detect_action_loop(state, llm_action):
+        forced = _next_pending_excluding(plan, llm_action)
+        if forced:
+            return forced, f"loop detected on '{llm_action}' — forcing plan step '{forced}'"
+        return "generate_result", f"loop detected on '{llm_action}' — forcing generate_result"
 
     if mode == "EXPLORE":
         return llm_action, "EXPLORE mode — LLM action accepted"
@@ -108,6 +132,19 @@ def resolve_planner_action(
     if llm_action in ("generate_result", "finish") and not _all_workers_done(plan):
         return next_planned, f"AUTO_PLAN — blocked early finish, next plan step '{next_planned}'"
     return llm_action, "AUTO_PLAN — LLM adapted plan"
+
+
+def _next_pending_excluding(plan: List[PlanStep], skip_action: str) -> str | None:
+    """Next pending worker step whose action differs from ``skip_action``."""
+    for step in plan:
+        if step.get("status") != "pending":
+            continue
+        action = step.get("action")
+        if action in ("generate_result", "finish"):
+            continue
+        if action != skip_action:
+            return action
+    return None
 
 
 def _all_workers_done(plan: List[PlanStep]) -> bool:

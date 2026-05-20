@@ -11,7 +11,12 @@ from agents.executor.python import python_agent_node
 from agents.executor.sql import route_after_sql, sql_agent_node
 from agents.planner.node import planner_node
 from agents.planner.routing import route_after_planner
-from agents.reflection.nodes import reflection_node, route_after_final_report
+from agents.reflection.nodes import (
+    reflection_node,
+    reflection_router,
+    route_after_final_report,
+)
+from agents.shared.error_boundary import with_error_boundary
 from agents.shared.state import AgentState
 from orchestration.orchestrator.node import orchestrator_node
 from utils.agent_logger import get_logger
@@ -25,13 +30,17 @@ def build_graph():
 
     builder.add_node("orchestrator", orchestrator_node)
     builder.add_node("planner", planner_node)
-    builder.add_node("sql", sql_agent_node)
-    builder.add_node("code_executor", code_executor_node)
-    builder.add_node("python", python_agent_node)
-    builder.add_node("web_discover", web_discover_agent_node)
-    builder.add_node("eda", eda_agent_node)
-    builder.add_node("insight", insight_agent_node)
-    builder.add_node("viz", viz_agent_node)
+    # Workers run inside an error boundary so a crash/timeout becomes an error
+    # observation the planner can react to, rather than aborting the run
+    # (solution.md §9). HITL nodes (sql/python/web_discover) pass timeout=None
+    # so the interrupt control-flow signal is never wrapped or clipped.
+    builder.add_node("sql", with_error_boundary(sql_agent_node, "sql", timeout=None))
+    builder.add_node("code_executor", with_error_boundary(code_executor_node, "code_executor"))
+    builder.add_node("python", with_error_boundary(python_agent_node, "python", timeout=None))
+    builder.add_node("web_discover", with_error_boundary(web_discover_agent_node, "web_discover", timeout=None))
+    builder.add_node("eda", with_error_boundary(eda_agent_node, "eda"))
+    builder.add_node("insight", with_error_boundary(insight_agent_node, "insight"))
+    builder.add_node("viz", with_error_boundary(viz_agent_node, "viz"))
     builder.add_node("final_report", final_report_node)
     builder.add_node("reflection", reflection_node)
 
@@ -72,7 +81,13 @@ def build_graph():
         route_after_final_report,
         {"reflection": "reflection", "done": END},
     )
-    builder.add_edge("reflection", END)
+    # Reflection may request one targeted rerun back through the planner when it
+    # finds a defect text-refinement can't fix (solution.md §2 Fix 3).
+    builder.add_conditional_edges(
+        "reflection",
+        reflection_router,
+        {"planner": "planner", "done": END},
+    )
 
     checkpointer = MemorySaver()
     logger.info("LangGraph compiled (agent-patterns ReAct + Reflection)")
