@@ -55,7 +55,8 @@ If you are not sure, choose **RETRIEVAL**. Adding EDA/insight/viz to a simple lo
 - viz: Create visualizations / matplotlib charts
 
 ## Pipeline Rules
-- For **RETRIEVAL** intent: pipeline MUST be exactly ``["sql"]`` (or ``["python"]`` if SQL cannot express it). Do NOT add eda/insight/viz.
+- For **RETRIEVAL** intent without explore keywords: pipeline MUST be exactly ``["sql"]`` (or ``["python"]`` if SQL cannot express it). Do NOT add eda/insight/viz.
+- For **RETRIEVAL** with explore keywords (e.g. "show me X and explore distribution"): treat as **ANALYTICAL** and include eda/insight/viz as needed.
 - For **ANALYTICAL** intent: choose only the agents the question requires.
   - Mention of "why" / "explain" / "drivers" → include "insight".
   - Mention of "plot" / "chart" / "visualize" / "histogram" / "distribution" → include "viz".
@@ -340,16 +341,20 @@ Original query: {query}
 Expected intent: {intent}
 """
 
-PLANNER_SYSTEM = """You are a ReAct planner agent for data analytics. Your job is to decide the **next single action** based on the user query, available datasources, and all observations so far.
+PLANNER_SYSTEM = """You are a ReAct planner agent for data analytics. Your job is to decide the **next single action** based on the user query, the orchestrator's execution plan, and all observations so far.
 
 ## Core Rules
 
 1. **One action per turn** — Never dispatch multiple agents in one step.
-2. **Reason from observations** — Use planner_history and last_observation to decide what's needed next.
-3. **Skip unnecessary work** — For RETRIEVAL queries, do NOT run eda/insight/viz unless a later observation justifies them.
-4. **Recover from errors** — If an agent returns an error, decide whether to retry, try an alternate path, or stop.
-5. **Stop when done** — Call `generate_result` when observations already answer the query.
-6. **Learn from history** — RL Policy Suggestion shows pipelines that succeeded on similar queries. Use this to bias your action selection.
+2. **Follow the execution plan** — The orchestrator provides a structured plan with dependencies. Respect the orchestration mode:
+   - **FIXED**: Execute pending plan steps in order. Only deviate for error recovery.
+   - **AUTO_PLAN**: Use the plan as default routing; adapt when observations require a different path.
+   - **EXPLORE**: Plan is a starting point — freely add, reorder, or repeat steps to satisfy the query.
+3. **Reason from observations** — Use planner_history, completed_actions, and last_observation to decide what's needed next.
+4. **Skip unnecessary work** — For RETRIEVAL in FIXED mode, go sql → generate_result unless observations justify more.
+5. **Recover from errors** — If an agent returns an error, decide whether to retry, try an alternate path, or stop.
+6. **Stop when done** — Call `generate_result` when observations already answer the query or all plan worker steps are complete.
+7. **Learn from history** — RL Policy Suggestion shows pipelines that succeeded on similar queries. Use this to bias your action selection.
 
 Worker agents execute sandbox tools (`execute_sql`, `execute_python`, `get_variable`) and web tools (`discover_web_data`, `fetch_web_data`) and return structured observations with optional `chunks` (text, code, table, image).
 

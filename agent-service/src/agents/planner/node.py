@@ -6,6 +6,11 @@ import json
 import re
 
 from agents.planner.history import compress_planner_history, format_rl_suggestion
+from agents.planner.plan_tracker import (
+    resolve_planner_action,
+    sync_plan_with_completed,
+    update_completed_actions,
+)
 from agents.shared.web_discover_policy import should_use_discover_action
 from agents.reflection.memory import get_policy_suggestion
 from agents.shared.state import AgentState, PlannerStep
@@ -15,6 +20,7 @@ from context.schema_service import (
     fetch_schema_payload,
     get_datasources,
 )
+from orchestration.routing.plan import format_plan_for_prompt, get_remaining_plan_summary
 from utils.agent_logger import get_logger
 from utils.llm_client import chat_complete, get_async_client
 from utils.prompts import PLANNER_SYSTEM, format_semantic_context_for_prompt
@@ -56,6 +62,13 @@ async def planner_node(state: AgentState) -> dict:
     if is_replan_from_reflection:
         if not planner_history or planner_history[-1].get("action") == "generate_result":
             replan_count += 1
+
+    completed_actions = update_completed_actions(state)
+    execution_plan = sync_plan_with_completed(
+        state.get("execution_plan") or [],
+        completed_actions,
+    )
+    orchestration_mode = state.get("orchestration_mode", "AUTO_PLAN")
 
     if is_first_step:
         tables_arg = state.get("tables")
@@ -112,6 +125,8 @@ async def planner_node(state: AgentState) -> dict:
     compressed_history = compress_planner_history(planner_history, keep_last_n=5)
     rl_suggestion = get_policy_suggestion(state.get("query", ""), state.get("intent", "RETRIEVAL"))
     rl_context = format_rl_suggestion(rl_suggestion) if rl_suggestion else "(No historical patterns available)"
+    plan_context = format_plan_for_prompt(execution_plan, orchestration_mode)  # type: ignore[arg-type]
+    remaining_steps = get_remaining_plan_summary(execution_plan)
 
     messages = [
         {"role": "system", "content": PLANNER_SYSTEM.format(MAX_PLANNER_STEPS=MAX_PLANNER_STEPS)},
@@ -126,6 +141,10 @@ async def planner_node(state: AgentState) -> dict:
                 f"User query: {state['query']}\n\n"
                 f"Intent (if known): {state.get('intent', 'unknown')}\n\n"
                 f"Execution mode (if known): {state.get('execution_mode', 'unknown')}\n\n"
+                f"Orchestration mode: {orchestration_mode}\n\n"
+                f"Execution plan:\n{plan_context}\n\n"
+                f"Remaining plan steps: {', '.join(remaining_steps) or '(none — wrap up with generate_result)'}\n\n"
+                f"Completed actions: {', '.join(completed_actions) or '(none)'}\n\n"
                 f"Planner history (compressed):\n{compressed_history}\n\n"
                 f"Last observation:\n{json.dumps(last_observation, indent=2) if last_observation else '(none)'}\n\n"
                 f"Reflection feedback (if re-planning): {reflection_feedback}\n\n"
@@ -178,6 +197,14 @@ async def planner_node(state: AgentState) -> dict:
             f"{thought} [discover_data unavailable: {discover_reason}. Using sql instead.]"
         ).strip()
 
+    action, plan_note = resolve_planner_action(
+        {**state, "execution_plan": execution_plan, "orchestration_mode": orchestration_mode},
+        action,
+        last_observation=last_observation,
+    )
+    if plan_note and plan_note not in thought:
+        thought = f"{thought} [{plan_note}]".strip()
+
     if execution_mode not in ("sql", "python"):
         execution_mode = "sql"
 
@@ -196,6 +223,9 @@ async def planner_node(state: AgentState) -> dict:
         "current_action": action,
         "intent": intent,
         "execution_mode": execution_mode,
+        "orchestration_mode": orchestration_mode,
+        "execution_plan": execution_plan,
+        "completed_actions": completed_actions,
         "planner_history": planner_history + [new_step],
         "planner_step_index": planner_step_index + 1,
         "replan_count": replan_count,

@@ -9,6 +9,15 @@ class PlannerStep(TypedDict, total=False):
     observation: Dict[str, Any]
 
 
+class ExecutionPlanStep(TypedDict, total=False):
+    """Structured plan step (DB-GPT GptsPlan-inspired)."""
+    step_id: int
+    action: str
+    status: str  # pending | running | done | failed | skipped
+    description: str
+    rely: List[int]
+
+
 class AgentState(TypedDict, total=False):
     # Identity
     session_id: str
@@ -39,7 +48,11 @@ class AgentState(TypedDict, total=False):
     planner_step_index: int  # current step count
     completed_actions: List[str]  # actions already executed in this run
 
-    # Legacy pipeline (kept for backward compat, not used for routing)
+    # Structured execution plan (orchestrator → planner contract)
+    execution_plan: List[ExecutionPlanStep]
+    orchestration_mode: str  # FIXED | AUTO_PLAN | EXPLORE
+
+    # Pipeline summary (mirrors worker steps in execution_plan)
     pipeline: List[str]
 
     # SQL Agent outputs
