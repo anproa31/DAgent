@@ -5,7 +5,7 @@ import infrastructure.matplotlib_backend  # noqa: F401  (must run before pyplot 
 
 from fastapi import FastAPI
 
-from api.routes import datasources, execution, system
+from api.routes import datasources, execution, sessions, system
 from datasources.bootstrap import bootstrap_from_app
 from infrastructure.duckdb import shutdown as duckdb_shutdown
 from infrastructure.duckdb import startup as duckdb_startup
@@ -18,6 +18,7 @@ def create_app() -> FastAPI:
 
     app.include_router(datasources.router)
     app.include_router(execution.router)
+    app.include_router(sessions.router)
     app.include_router(system.router)
 
     @app.on_event("startup")

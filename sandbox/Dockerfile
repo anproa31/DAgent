@@ -16,6 +16,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application package (main.py remains the uvicorn entrypoint)
 COPY main.py app_factory.py ./
 COPY api ./api
+COPY control_layer ./control_layer
+COPY execution_layer ./execution_layer
 COPY execution ./execution
 COPY datasources ./datasources
 COPY infrastructure ./infrastructure
