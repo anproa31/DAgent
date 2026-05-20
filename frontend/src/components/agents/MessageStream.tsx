@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, Search, Code2, Terminal, FileCheck, Loader2 } from 'lucide-react'
+import { ChevronDown, Search, Terminal, FileCheck, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible'
 import { AIResponse } from '@/components/ui/kibo-ui/response'
@@ -32,7 +32,7 @@ function StreamBlock({ label, icon: Icon, status, defaultOpen = true, children, 
         </div>
         <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform duration-200', open && 'rotate-180')} />
       </CollapsibleTrigger>
-      <CollapsibleContent className='px-4 py-3'>
+      <CollapsibleContent className='px-4 pb-3 pt-1 [&>:first-child]:mt-0'>
         {children}
       </CollapsibleContent>
     </Collapsible>
@@ -51,29 +51,6 @@ export function AnalyzeBlock({ content, status }: AnalyzeBlockProps) {
     <StreamBlock label='Analyze' icon={Search} status={status}>
       <div className='text-sm text-muted-foreground space-y-1 leading-relaxed'>
         <AIResponse>{content}</AIResponse>
-      </div>
-    </StreamBlock>
-  )
-}
-
-interface CodeBlockStreamProps {
-  code: string
-  language?: string
-  status: StreamBlockStatus
-}
-
-export function CodeBlockStream({ code, language = 'python', status }: CodeBlockStreamProps) {
-  if (!code && status === 'idle') return null
-
-  return (
-    <StreamBlock label='Code' icon={Code2} status={status}>
-      <div className='rounded-md bg-zinc-950 dark:bg-zinc-900 overflow-hidden'>
-        <div className='flex items-center justify-between px-3 py-1.5 border-b border-zinc-800'>
-          <span className='text-[11px] font-mono text-zinc-400'>{language}</span>
-        </div>
-        <pre className='p-3 overflow-x-auto text-sm'>
-          <code className='font-mono text-zinc-100 leading-relaxed whitespace-pre-wrap'>{code}</code>
-        </pre>
       </div>
     </StreamBlock>
   )

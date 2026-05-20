@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button'
 import { ImageZoom } from '@/components/ui/kibo-ui/image-zoom'
 import { AIResponse } from '@/components/ui/kibo-ui/response'
 import {
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -23,6 +22,7 @@ import {
 } from '@/components/ui/tooltip'
 import { useRef } from 'react'
 import { useReactToPrint } from 'react-to-print'
+import { cn } from '@/lib/utils'
 // import { A } from 'node_modules/@faker-js/faker/dist/airline-CLphikKp';
 
 interface ReportContentProps {
@@ -86,10 +86,9 @@ export function ReportContent({
 
   return (
 
-    <div className='space-y-6'>
-      <div className='flex justify-start no-print'>
-        {/* Python Code Button */}
-        {pythonCode && (
+    <div className='space-y-4'>
+      {pythonCode && (
+        <div className='flex justify-start no-print'>
           <Button
             variant='link'
             onClick={() =>
@@ -100,11 +99,11 @@ export function ReportContent({
             <ChevronDown className='h-4 w-4' />
             Python Code
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
 
-      <div ref={printRef} className='p-0 m-0 space-y-4'>
+      <div ref={printRef} className='m-0 space-y-4 p-0'>
         {/* Steps Section */}
         {steps && steps.length > 0 && (
           <div className='space-y-2'>
@@ -323,6 +322,8 @@ function TableBlock({
   const previewMaxRows = 4
   const previewData = data.slice(0, previewMaxRows)
   const hiddenRowCount = Math.max(0, data.length - previewMaxRows)
+  const isCompactTable = columns.length <= 5
+  const cellPadding = isCompactTable ? 'px-4 py-2.5' : 'px-2 py-2'
 
   return (
     <div>
@@ -335,13 +336,25 @@ function TableBlock({
           })
         }
       >
-        <div className='mb-5 overflow-hidden rounded-xl border print:shadow-none transition-all hover:shadow-md'>
-          <div className='max-h-96 overflow-auto'>
-            <Table className='pointer-events-none w-max'>
-              <TableHeader>
-                <TableRow>
+        <div
+          className={cn(
+            'mb-5 overflow-hidden rounded-xl border bg-card print:shadow-none transition-all hover:shadow-md',
+            isCompactTable ? 'inline-block w-fit max-w-full' : 'w-full'
+          )}
+        >
+          <div className='max-h-96 overflow-x-auto'>
+            <table className='pointer-events-none w-max caption-bottom text-sm'>
+              <TableHeader className='bg-muted/40'>
+                <TableRow className='hover:bg-transparent'>
                   {columns.map((header, index) => (
-                    <TableHead key={index} className='whitespace-nowrap'>
+                    <TableHead
+                      key={index}
+                      className={cn(
+                        'whitespace-nowrap font-semibold',
+                        cellPadding,
+                        isCompactTable && 'min-w-[4.5rem]'
+                      )}
+                    >
                       {header}
                     </TableHead>
                   ))}
@@ -351,14 +364,17 @@ function TableBlock({
                 {previewData.map((row, rowIndex) => (
                   <TableRow key={rowIndex}>
                     {columns.map((column, cellIndex) => (
-                      <TableCell key={cellIndex} className='whitespace-nowrap'>
-                        {String(row[column] || '')}
+                      <TableCell
+                        key={cellIndex}
+                        className={cn('whitespace-nowrap', cellPadding)}
+                      >
+                        {String(row[column] ?? '')}
                       </TableCell>
                     ))}
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+            </table>
           </div>
           {hiddenRowCount > 0 && (
             <div className='print:hidden border-t bg-muted/40 px-3 py-2 text-center text-sm text-muted-foreground'>

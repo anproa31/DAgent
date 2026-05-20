@@ -6,7 +6,7 @@ import { useModelListByMode, type ModelInfo, type ActionStep, type ReportContent
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { WorkflowStepTracker, deriveVisibleSteps } from '@/components/agents/WorkflowStepTracker'
-import { AnalyzeBlock, CodeBlockStream, AnswerBlock, StreamingAnswerBlock } from '@/components/agents/MessageStream'
+import { AnswerBlock, StreamingAnswerBlock } from '@/components/agents/MessageStream'
 import { SQLApprovalModal } from '@/components/agents/SQLApprovalModal'
 import { ReportContent } from '@/features/analysis-report/components/report-content'
 import { SidePanel } from '@/features/analysis-report/components/side-panel'
@@ -98,20 +98,6 @@ function AgentRunItem({
 
   const visibleSteps = deriveVisibleSteps(run.currentAgent, run.agentSteps, run.phase)
 
-  const analyzeStatus =
-    isActive && ['orchestrator', 'eda', 'insight'].includes(run.currentAgent)
-      ? ('generating' as const)
-      : run.thinkingMessage || run.phase === 'done' || run.phase === 'stopped'
-        ? ('done' as const)
-        : ('idle' as const)
-
-  const codeStatus =
-    isActive && ['sql', 'code_executor'].includes(run.currentAgent)
-      ? ('generating' as const)
-      : run.phase === 'done' || run.phase === 'stopped'
-        ? ('done' as const)
-        : ('idle' as const)
-
   const answerStatus = showReport
     ? 'done' as const
     : isActive && (['final_report', 'viz'].includes(run.currentAgent) || run.streamingAnswer.length > 0)
@@ -131,7 +117,7 @@ function AgentRunItem({
 
   const submitEdit = async () => {
     const trimmed = editValue.trim()
-    if (!trimmed || trimmed === run.query) {
+    if (!trimmed) {
       cancelEditing()
       return
     }
@@ -214,19 +200,6 @@ function AgentRunItem({
 
       {/* Accordion-style streaming blocks */}
       <div className='space-y-3'>
-        <AnalyzeBlock
-          content={run.thinkingMessage || ''}
-          status={analyzeStatus}
-        />
-
-        {run.pendingSql && (
-          <CodeBlockStream
-            code={run.pendingSql}
-            language='sql'
-            status={codeStatus}
-          />
-        )}
-
         {/* Live token/chunk streaming of the final answer while running */}
         {isActive && run.streamingAnswer && (
           <StreamingAnswerBlock content={run.streamingAnswer} status='generating' />

@@ -108,26 +108,30 @@ interface WorkflowStepTrackerProps {
   className?: string
 }
 
+const MAX_VISIBLE_STEPS = 5
+
 export function WorkflowStepTracker({ steps, className }: WorkflowStepTrackerProps) {
   if (!steps.length) return null
 
+  const hiddenCount = Math.max(0, steps.length - MAX_VISIBLE_STEPS)
+  const visibleSteps = steps.slice(hiddenCount)
+
   return (
     <div
-      className={cn(
-        'flex items-start justify-center gap-0 py-6 px-6 overflow-x-auto',
-        className
-      )}
+      className={cn('w-full min-w-0 overflow-hidden py-6 px-2', className)}
     >
-      {steps.map((step, index) => {
-        const Icon = step.icon
-        const isLast = index === steps.length - 1
+      <div className='flex items-start justify-center transition-all duration-300'>
+        {visibleSteps.map((step, index) => {
+          const Icon = step.icon
+          const isLast = index === visibleSteps.length - 1
+          const globalIndex = hiddenCount + index
 
-        return (
-          <div
-            key={`${step.agent}-${index}`}
-            className='flex items-start animate-in fade-in-0 slide-in-from-bottom-1 duration-300'
-          >
-            <div className='flex flex-col items-center'>
+          return (
+            <div
+              key={`${step.agent}-${globalIndex}`}
+              className='flex shrink-0 items-start animate-in fade-in-0 slide-in-from-right-2 duration-300'
+            >
+              <div className='flex w-14 shrink-0 flex-col items-center'>
               {/* Reserve vertical space so every column aligns; badge sits above the icon with clear separation */}
               <div className='mb-3 flex min-h-[30px] w-full flex-col items-center justify-end'>
                 {step.status === 'active' ? (
@@ -158,7 +162,7 @@ export function WorkflowStepTracker({ steps, className }: WorkflowStepTrackerPro
 
               <span
                 className={cn(
-                  'mt-3 text-[11px] font-medium transition-colors whitespace-nowrap',
+                  'mt-3 w-full text-center text-[11px] font-medium leading-tight transition-colors whitespace-nowrap',
                   step.status === 'active' && 'text-primary font-semibold',
                   step.status === 'completed' && 'text-green-600'
                 )}
@@ -170,7 +174,7 @@ export function WorkflowStepTracker({ steps, className }: WorkflowStepTrackerPro
             {!isLast && (
               <div
                 className={cn(
-                  'h-[2px] w-10 mx-2 mt-[52px] shrink-0 transition-colors duration-300',
+                  'mx-1 mt-[52px] h-[2px] w-6 shrink-0 transition-colors duration-300',
                   // Connector reflects completion of the step on its left.
                   step.status === 'completed' ? 'bg-green-500/50' : 'bg-primary/30'
                 )}
@@ -179,6 +183,7 @@ export function WorkflowStepTracker({ steps, className }: WorkflowStepTrackerPro
           </div>
         )
       })}
+      </div>
     </div>
   )
 }

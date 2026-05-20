@@ -3,23 +3,7 @@ import { memo } from 'react'
 import ReactMarkdown, { type Options } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { cn } from '@/lib/utils'
-import {
-  type BundledLanguage,
-  CodeBlock,
-  CodeBlockBody,
-  CodeBlockContent,
-  CodeBlockCopyButton,
-  CodeBlockFilename,
-  CodeBlockFiles,
-  CodeBlockHeader,
-  CodeBlockItem,
-  type CodeBlockProps,
-  CodeBlockSelect,
-  CodeBlockSelectContent,
-  CodeBlockSelectItem,
-  CodeBlockSelectTrigger,
-  CodeBlockSelectValue,
-} from '@/components/ui/kibo-ui/code-block'
+import { SimpleCodeBlock } from '@/components/ui/simple-code-block'
 
 export type AIResponseProps = HTMLAttributes<HTMLDivElement> & {
   options?: Options
@@ -27,8 +11,8 @@ export type AIResponseProps = HTMLAttributes<HTMLDivElement> & {
 }
 const components: Options['components'] = {
   table: ({ node, children, className, ...props }) => (
-    <div className='my-4 overflow-x-auto rounded-lg border'>
-      <table className={cn('w-full text-sm', className)} {...props}>
+    <div className='my-4 inline-block max-w-full overflow-x-auto rounded-lg border bg-card'>
+      <table className={cn('w-max caption-bottom text-sm', className)} {...props}>
         {children}
       </table>
     </div>
@@ -128,7 +112,7 @@ const components: Options['components'] = {
     </h6>
   ),
   pre: ({ node, className, children }) => {
-    let language = 'javascript'
+    let language = 'text'
     if (typeof node?.properties?.className === 'string') {
       language = node.properties.className.replace('language-', '')
     }
@@ -140,54 +124,15 @@ const components: Options['components'] = {
     if (!childrenIsCode) {
       return <pre>{children}</pre>
     }
-    const data: CodeBlockProps['data'] = [
-      {
-        language,
-        filename: 'index.js',
-        code: (children.props as { children: string }).children,
-      },
-    ]
+
+    const code = (children.props as { children: string }).children
+
     return (
-      <CodeBlock
-        className={cn('my-4 h-auto', className)}
-        data={data}
-        defaultValue={data[0].language}
-      >
-        <CodeBlockHeader>
-          <CodeBlockFiles>
-            {(item) => (
-              <CodeBlockFilename key={item.language} value={item.language}>
-                {item.filename}
-              </CodeBlockFilename>
-            )}
-          </CodeBlockFiles>
-          <CodeBlockSelect>
-            <CodeBlockSelectTrigger>
-              <CodeBlockSelectValue />
-            </CodeBlockSelectTrigger>
-            <CodeBlockSelectContent>
-              {(item) => (
-                <CodeBlockSelectItem key={item.language} value={item.language}>
-                  {item.language}
-                </CodeBlockSelectItem>
-              )}
-            </CodeBlockSelectContent>
-          </CodeBlockSelect>
-          <CodeBlockCopyButton
-            onCopy={() => console.log('Copied code to clipboard')}
-            onError={() => console.error('Failed to copy code to clipboard')}
-          />
-        </CodeBlockHeader>
-        <CodeBlockBody>
-          {(item) => (
-            <CodeBlockItem key={item.language} value={item.language}>
-              <CodeBlockContent language={item.language as BundledLanguage}>
-                {item.code}
-              </CodeBlockContent>
-            </CodeBlockItem>
-          )}
-        </CodeBlockBody>
-      </CodeBlock>
+      <SimpleCodeBlock
+        className={cn('mb-4 h-auto', className)}
+        code={code}
+        language={language}
+      />
     )
   },
 }
