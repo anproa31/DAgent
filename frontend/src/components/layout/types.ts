@@ -22,7 +22,7 @@ type NavAction = BaseNavItem & {
 }
 
 type NavCollapsible = BaseNavItem & {
-  items: ((BaseNavItem & { url: LinkProps['to']; search?: Record<string, unknown> }) | NavAction)[]
+  items: ((BaseNavItem & { url: LinkProps['to']; search?: Record<string, unknown>; route?: any }) | NavAction)[]
   url?: never
   action?: never
 }
