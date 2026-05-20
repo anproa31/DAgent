@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import re
 
+from langgraph.types import interrupt
+
+from agents.executor.python_risk import HIGH, MEDIUM, assess_python_risk
 from agents.shared.data_discovery import extract_data_discovery_error
-from agents.shared.observations import observation_from_tool_result
+from agents.shared.observations import create_observation, observation_from_tool_result
 from agents.shared.state import AgentState
 from tools.executor import run_tool
 from utils.agent_logger import get_logger
@@ -32,8 +35,6 @@ async def python_agent_node(state: AgentState) -> dict:
         raw = await chat_complete(client, model, messages, temperature=0.2, log_tag="python_agent")
     except Exception as exc:
         logger.error("LLM error: %s", exc)
-        from agents.shared.observations import create_observation
-
         obs = create_observation(
             agent_name="python",
             status="error",
@@ -53,6 +54,65 @@ async def python_agent_node(state: AgentState) -> dict:
     logger.info("generated Python (%d chars)", len(python_code))
 
     session_id = state.get("session_id", state.get("run_id", "default"))
+
+    # Risk-tiered review before execution (solution.md §5).
+    risk = assess_python_risk(python_code)
+    logger.info("python risk tier=%s", risk)
+
+    if risk == HIGH:
+        obs = create_observation(
+            agent_name="python",
+            status="error",
+            summary="Blocked: high-risk Python (network/os/subprocess)",
+            artifacts={"python_code": python_code, "python_risk": HIGH, "data_summary": ""},
+            error="High-risk Python (network/os/subprocess) blocked by policy",
+            next_hint="Rewrite using only pandas/numpy/scipy on the DuckDB views — no os/network/subprocess.",
+        )
+        return {
+            "current_agent": "python",
+            "python_code": python_code,
+            "python_risk": HIGH,
+            "error": "High-risk Python blocked by policy",
+            "data_summary": "",
+            "result_var_names": [],
+            "agent_steps": state.get("agent_steps", []) + ["python"],
+            "last_observation": obs,
+        }
+
+    if risk == MEDIUM:
+        approval = interrupt(
+            {
+                "type": "python_review",
+                "code": python_code,
+                "risk": MEDIUM,
+                "query": state["query"],
+            }
+        )
+        approved = approval.get("approved", False)
+        edited_code = (approval.get("code") or python_code).strip()
+        rejection_reason = approval.get("reason", "")
+        logger.info("python HITL approved=%s edited=%s", approved, edited_code != python_code)
+
+        if not approved:
+            obs = create_observation(
+                agent_name="python",
+                status="rejected",
+                summary=f"Python execution rejected: {rejection_reason or 'User declined'}",
+                artifacts={"python_code": edited_code, "python_risk": MEDIUM, "data_summary": ""},
+                error=rejection_reason or "User rejected Python execution",
+                next_hint="Adjust the approach per the user's feedback or try sql instead.",
+            )
+            return {
+                "current_agent": "python",
+                "python_code": edited_code,
+                "python_risk": MEDIUM,
+                "data_summary": "",
+                "result_var_names": [],
+                "agent_steps": state.get("agent_steps", []) + ["python"],
+                "last_observation": obs,
+            }
+        python_code = edited_code
+
     exec_result = await run_tool(session_id, "execute_python", code=python_code)
     if not exec_result.success:
         err = exec_result.error or "Python execution failed"

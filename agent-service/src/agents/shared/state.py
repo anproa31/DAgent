@@ -94,6 +94,14 @@ class AgentState(TypedDict, total=False):
     needs_refinement: bool
     continue_reflection: bool
 
+    # Reflection → planner targeted rerun (solution.md §2 Fix 3)
+    reflection_needs_rerun: bool
+    rerun_count: int
+
+    # Python HITL risk tier (solution.md §5)
+    python_risk: str  # safe | medium | high
+
     # Control
     done: bool
     error: str
+    completion_reason: str  # success | step_limit | hitl_timeout | user_cancelled

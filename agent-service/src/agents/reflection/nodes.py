@@ -12,17 +12,46 @@ from agents.reflection.helpers import build_data_context_from_history, flatten_r
 from agents.reflection.memory import record_trajectory
 from agents.reflection.pattern import should_run_reflection
 from agents.shared.state import AgentState
+from config.settings import MAX_REFLECTION_PASSES, MAX_REFLECTION_RERUNS
+from orchestration.routing.plan import update_plan_from_reflection
 from utils.agent_logger import get_logger
 from utils.prompts import format_semantic_context_for_prompt
 
 logger = get_logger("reflection")
 
+# Feedback signalling a defect text-refinement cannot fix — needs a worker rerun.
+_SERIOUS_ISSUE_PATTERNS = (
+    re.compile(r"\b(missing|absent|no)\s+(data|chart|table|visuali[sz]ation|figure)\b", re.I),
+    re.compile(r"\b(wrong|incorrect|mismatch(?:ed)?|inconsistent)\s+(number|value|figure|total|count)", re.I),
+    re.compile(r"\bdoes not (answer|address)\b", re.I),
+    re.compile(r"\b(requested|expected)\s+(chart|plot|visuali[sz]ation)\b.*\b(not|missing)\b", re.I),
+)
+
 
 async def reflection_node(state: AgentState) -> dict:
-    """Run agent-patterns reflect → refine on the compiled report."""
+    """Run agent-patterns reflect → refine on the compiled report.
+
+    Bounded by ``MAX_REFLECTION_PASSES`` (solution.md §2 Fix 1). When the
+    critic finds a defect text can't fix, flag a single targeted rerun back
+    through the planner (solution.md §2 Fix 3).
+    """
     report_content = state.get("report_content") or []
     report_text = flatten_report_content(report_content)
-    max_cycles = state.get("max_reflection_cycles", 1)
+    prior_cycles = state.get("reflection_cycle", 0)
+
+    # Hard limit: never refine more than MAX_REFLECTION_PASSES times per run.
+    if prior_cycles >= MAX_REFLECTION_PASSES:
+        logger.info("reflection hard limit reached (%d) — stopping", prior_cycles)
+        return {
+            "current_agent": "reflection",
+            "reflection": "Reflection passes exhausted; accepting current report.",
+            "reflection_needs_rerun": False,
+            "agent_steps": state.get("agent_steps", []) + ["reflection"],
+        }
+
+    # Cap the agent's internal cycles to the remaining budget.
+    remaining = max(1, MAX_REFLECTION_PASSES - prior_cycles)
+    max_cycles = min(state.get("max_reflection_cycles", 1) or 1, remaining)
 
     task = _build_reflection_task(state)
     agent = get_analytics_reflection_agent(
@@ -39,47 +68,83 @@ async def reflection_node(state: AgentState) -> dict:
         return {
             "current_agent": "reflection",
             "reflection": f"Reflection skipped: {exc}",
+            "reflection_needs_rerun": False,
             "agent_steps": state.get("agent_steps", []) + ["reflection"],
         }
 
     refined_text = result.get("final_answer") or report_text
     updated_content = _merge_refined_report(report_content, refined_text)
+    feedback = result.get("reflection", "") or ""
 
     record_trajectory(
         query=state.get("query", ""),
         intent=state.get("intent", "ANALYTICAL"),
         pipeline=state.get("pipeline", []),
         critic_passed=not result.get("needs_refinement", False),
-        critic_feedback=result.get("reflection", ""),
+        critic_feedback=feedback,
         data_error=None,
         replan_count=result.get("reflection_cycle", 0),
         planner_steps=state.get("planner_history", []),
     )
 
-    logger.info(
-        "reflection done cycles=%d refined=%s",
-        result.get("reflection_cycle", 0),
-        bool(result.get("refined_output")),
-    )
+    rerun_count = state.get("rerun_count", 0)
+    serious = _detect_serious_issue(feedback) and bool(result.get("needs_refinement", False))
+    can_rerun = serious and rerun_count < MAX_REFLECTION_RERUNS
 
-    return {
+    patch: dict = {
         "current_agent": "reflection",
         "report_content": updated_content,
-        "reflection": result.get("reflection", ""),
+        "reflection": feedback,
         "refined_output": result.get("refined_output") or refined_text,
-        "reflection_cycle": result.get("reflection_cycle", 0),
+        "reflection_cycle": prior_cycles + max(1, result.get("reflection_cycle", 0)),
         "needs_refinement": result.get("needs_refinement", False),
         "continue_reflection": result.get("continue_reflection", False),
+        "reflection_needs_rerun": can_rerun,
         "agent_steps": state.get("agent_steps", []) + ["reflection"],
     }
+
+    if can_rerun:
+        new_plan = update_plan_from_reflection(
+            state.get("execution_plan") or [],
+            feedback,
+            state.get("execution_mode", "sql"),
+        )
+        patch["execution_plan"] = new_plan
+        patch["rerun_count"] = rerun_count + 1
+        patch["done"] = False  # let the planner pick up the inserted steps
+        logger.info("reflection requesting targeted rerun (#%d)", rerun_count + 1)
+
+    logger.info(
+        "reflection done cycles=%d refined=%s rerun=%s",
+        patch["reflection_cycle"],
+        bool(result.get("refined_output")),
+        can_rerun,
+    )
+
+    return patch
 
 
 def route_after_final_report(state: AgentState) -> str:
     if not should_run_reflection(state):
-        logger.info("route final_report -> END (RETRIEVAL, skip reflection)")
+        logger.info("route final_report -> END (skip reflection)")
         return "done"
     logger.info("route final_report -> reflection (agent-patterns)")
     return "reflection"
+
+
+def reflection_router(state: AgentState) -> str:
+    """After reflection: targeted rerun via planner, else finish (solution.md §2 Fix 3)."""
+    if state.get("reflection_needs_rerun") and state.get("rerun_count", 0) <= MAX_REFLECTION_RERUNS:
+        logger.info("route reflection -> planner (targeted rerun)")
+        return "planner"
+    logger.info("route reflection -> END")
+    return "done"
+
+
+def _detect_serious_issue(feedback: str) -> bool:
+    if not feedback:
+        return False
+    return any(p.search(feedback) for p in _SERIOUS_ISSUE_PATTERNS)
 
 
 def _build_reflection_task(state: AgentState) -> str:

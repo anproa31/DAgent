@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any, AsyncGenerator, List
+from datetime import datetime, timezone
+from typing import Any, AsyncGenerator, List, Optional
 
 from langgraph.types import Command
 
+from agents.planner.analytics_react_agent import MAX_PLANNER_STEPS
+from config.settings import HITL_TIMEOUT_SECONDS
 from infrastructure.database.connection import async_session_maker
 from infrastructure.repositories import run_repository, session_repository
 from interfaces.api.session_title import update_session_title_if_empty
@@ -31,9 +34,76 @@ class RunState:
         self.sql_rejection_reason: str = ""
         self.pending_approval_type: str = ""
         self.web_discover_proposal: dict = {}
+        self.python_code: str = ""
+        self.python_risk: str = ""
         self.insights: str = ""
         self.agent_steps: list = []
         self.error: str = ""
+        # Standardized completion/error reporting (solution.md §10).
+        self.completion_reason: str = "success"
+        self.error_code: str = ""
+        self.recoverable: bool = True
+        self.affected_step: str = ""
+        self.steps_used: int = 0
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _base_event_fields(run: RunState) -> dict:
+    """Common fields on every structured SSE event (solution.md §10)."""
+    return {
+        "run_id": run.run_id,
+        "timestamp": _now_iso(),
+        "step": run.steps_used,
+    }
+
+
+def make_done_event(run: RunState) -> dict:
+    data = _base_event_fields(run)
+    data.update(
+        {
+            "completion_reason": run.completion_reason,
+            "steps_used": run.steps_used,
+            "steps_budget": MAX_PLANNER_STEPS,
+            "content": run.report_content,
+            "insights": run.insights,
+        }
+    )
+    return {"event": "done", "data": data}
+
+
+def make_error_event(
+    run: RunState,
+    *,
+    code: str,
+    message: str,
+    recoverable: bool,
+    affected_step: Optional[str] = None,
+) -> dict:
+    run.error_code = code
+    run.recoverable = recoverable
+    if affected_step:
+        run.affected_step = affected_step
+    data = _base_event_fields(run)
+    data.update(
+        {
+            "code": code,
+            "message": message,
+            "recoverable": recoverable,
+            "affected_step": affected_step or run.affected_step or None,
+        }
+    )
+    return {"event": "error", "data": data}
+
+
+def _derive_completion_reason(run: RunState) -> str:
+    if run.error == "stopped":
+        return "user_cancelled"
+    if run.steps_used >= MAX_PLANNER_STEPS:
+        return "step_limit"
+    return "success"
 
 
 def normalize_report_content(rc: Any) -> List[Any]:
@@ -101,10 +171,16 @@ async def _stream_graph_chunks(run: RunState, config: dict, input_or_command):
                     run.sql_draft = node_output["sql_draft"]
                 if node_output.get("sql_explanation"):
                     run.sql_explanation = node_output["sql_explanation"]
+                if node_output.get("python_code"):
+                    run.python_code = node_output["python_code"]
+                if node_output.get("python_risk"):
+                    run.python_risk = node_output["python_risk"]
                 if node_output.get("insights"):
                     run.insights = node_output["insights"]
                 if node_output.get("report_content"):
                     run.report_content = node_output["report_content"]
+                if node_output.get("planner_step_index") is not None:
+                    run.steps_used = node_output["planner_step_index"]
 
             event_data = {
                 "agent": node_name,
@@ -172,6 +248,20 @@ async def _handle_hitl_interrupt(run: RunState, config: dict) -> bool:
             {"event": "web_datasource_proposed", "data": interrupt_value}
         )
         resume_message = "Resuming analysis after web datasource approval..."
+    elif interrupt_type == "python_review":
+        run.python_code = interrupt_value.get("code", "")
+        run.python_risk = interrupt_value.get("risk", "medium")
+        await run.event_queue.put(
+            {
+                "event": "python_review_required",
+                "data": {
+                    "code": run.python_code,
+                    "risk": run.python_risk,
+                    "query": run.query,
+                },
+            }
+        )
+        resume_message = "Resuming analysis after Python approval..."
     else:
         run.sql_draft = interrupt_value.get("sql", run.sql_draft)
         run.sql_explanation = interrupt_value.get("explanation", "")
@@ -187,7 +277,24 @@ async def _handle_hitl_interrupt(run: RunState, config: dict) -> bool:
         )
         resume_message = "Resuming analysis after SQL approval..."
 
-    await run.approval_event.wait()
+    # HITL TTL (solution.md §6): cancel the run if no decision arrives in time.
+    try:
+        await asyncio.wait_for(run.approval_event.wait(), timeout=HITL_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError:
+        run.done = True
+        run.completion_reason = "hitl_timeout"
+        run.error = "hitl_timeout"
+        minutes = HITL_TIMEOUT_SECONDS // 60
+        await run.event_queue.put(
+            make_error_event(
+                run,
+                code="HITL_TIMEOUT",
+                message=f"No approval received after {minutes} minutes. Run cancelled.",
+                recoverable=False,
+                affected_step=interrupt_type,
+            )
+        )
+        return False
     run.approval_event.clear()
 
     await run.event_queue.put(
@@ -215,23 +322,41 @@ async def run_graph(run: RunState, initial_input: dict) -> None:
         while await _handle_hitl_interrupt(run, config):
             pass
 
+        # HITL timed out — error event already emitted, nothing more to do.
+        if run.completion_reason == "hitl_timeout":
+            await emit_title_updated_if_needed(run, initial_input)
+            return
+
         final_state = compiled_graph.get_state(config)
         if final_state and final_state.values:
             vals = final_state.values
             run.report_content = vals.get("report_content", run.report_content)
             run.insights = vals.get("insights", run.insights)
             run.agent_steps = vals.get("agent_steps", run.agent_steps)
-            run.error = vals.get("error", "")
+            run.steps_used = vals.get("planner_step_index", run.steps_used)
+            # Preserve a "stopped"/timeout reason already set; otherwise mirror state error.
+            if not run.error:
+                run.error = vals.get("error", "")
 
         run.done = True
+        run.completion_reason = _derive_completion_reason(run)
         await emit_title_updated_if_needed(run, initial_input)
-        await run.event_queue.put({"event": "done", "data": {"content": run.report_content, "insights": run.insights}})
+        await run.event_queue.put(make_done_event(run))
 
     except Exception as e:
         run.error = str(e)
         run.done = True
+        run.completion_reason = "error"
         await emit_title_updated_if_needed(run, initial_input)
-        await run.event_queue.put({"event": "error", "data": {"message": str(e)}})
+        await run.event_queue.put(
+            make_error_event(
+                run,
+                code="GRAPH_ERROR",
+                message=str(e),
+                recoverable=False,
+                affected_step=run.current_agent,
+            )
+        )
         print(f"[runs] graph error for run {run.run_id}: {e}")
     finally:
         try:
@@ -280,6 +405,10 @@ def build_initial_state(
         "refined_output": "",
         "needs_refinement": False,
         "continue_reflection": False,
+        "reflection_needs_rerun": False,
+        "rerun_count": 0,
+        "python_risk": "",
+        "completion_reason": "",
         "sql_draft": "",
         "sql_explanation": "",
         "sql_approved": False,
