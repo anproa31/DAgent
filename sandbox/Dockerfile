@@ -13,8 +13,13 @@ WORKDIR /usr/src/app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY main.py .
+# Copy application package (main.py remains the uvicorn entrypoint)
+COPY main.py app_factory.py ./
+COPY api ./api
+COPY execution ./execution
+COPY datasources ./datasources
+COPY infrastructure ./infrastructure
+COPY security ./security
 
 # Ensure the datasource volume mountpoint exists.
 RUN mkdir -p /data/datasources
