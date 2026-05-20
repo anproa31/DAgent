@@ -11,6 +11,7 @@ from agents.shared.state import AgentState
 from utils.agent_logger import get_logger
 from utils.llm_client import chat_complete, get_async_client
 from utils.prompts import SQL_AGENT_SYSTEM, format_semantic_context_for_prompt
+from utils.sql_sanitize import clean_sql_for_execution, extract_sql_from_llm_response
 
 logger = get_logger("sql_agent")
 
@@ -77,16 +78,8 @@ async def sql_agent_node(state: AgentState) -> dict:
     sql_draft = ""
     sql_explanation = ""
 
-    sql_match = re.search(r"SQL:\s*(.+?)(?=EXPLANATION:|$)", raw, re.DOTALL | re.IGNORECASE)
     exp_match = re.search(r"EXPLANATION:\s*(.+)", raw, re.DOTALL | re.IGNORECASE)
-
-    if sql_match:
-        sql_draft = sql_match.group(1).strip().strip("`").strip()
-        sql_draft = re.sub(r"^```sql\s*", "", sql_draft, flags=re.IGNORECASE)
-        sql_draft = re.sub(r"```$", "", sql_draft).strip()
-    else:
-        sel_match = re.search(r"(SELECT .+)", raw, re.DOTALL | re.IGNORECASE)
-        sql_draft = sel_match.group(1).strip() if sel_match else raw.strip()
+    sql_draft = clean_sql_for_execution(extract_sql_from_llm_response(raw))
 
     if exp_match:
         sql_explanation = exp_match.group(1).strip()
@@ -103,7 +96,7 @@ async def sql_agent_node(state: AgentState) -> dict:
     )
 
     approved = approval.get("approved", False)
-    edited_sql = approval.get("sql", sql_draft)
+    edited_sql = clean_sql_for_execution(approval.get("sql", sql_draft) or "")
     rejection_reason_new = approval.get("reason", "")
     logger.info("HITL approval=%s edited=%s", approved, edited_sql != sql_draft)
 

@@ -10,12 +10,13 @@ from agents.shared.observations import create_observation
 from agents.shared.state import AgentState
 from infrastructure.sandbox.code_runner import execute_sql, get_variable
 from utils.agent_logger import get_logger
+from utils.sql_sanitize import clean_sql_for_execution
 
 logger = get_logger("code_executor")
 
 
 async def code_executor_node(state: AgentState) -> dict:
-    sql = state.get("sql_draft", "")
+    sql = clean_sql_for_execution(state.get("sql_draft", ""))
     session_id = state.get("session_id", state.get("run_id", "default"))
 
     logger.info("enter session=%s sql=%r", session_id, sql[:200] if sql else "")

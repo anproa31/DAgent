@@ -109,7 +109,7 @@ Rules:
 - For aggregations, include explicit ``GROUP BY``.
 - When joining tables, prefer the join keys listed under ``**Potential joins:**`` over guessing from column names alone.
 
-Respond with ONLY this format:
+Respond with ONLY this format (no markdown code fences — raw SQL only):
 SQL: <your DuckDB SQL query here>
 EXPLANATION: <one sentence explaining what this query does>
 """
@@ -164,14 +164,23 @@ Datasource schema: {schema}
 Data Summary: {data_summary}
 EDA Findings: {eda_summary}
 
-Generate 3-5 concise business insights that are:
+Generate exactly 3 concise business insights that are:
 - Actionable (suggest what to do)
 - Business-readable (no jargon)
 - Specific (include numbers where relevant)
-- Ranked by business impact
+
+Impact levels — mandatory:
+- Exactly one insight labeled **High** (highest business impact)
+- Exactly one insight labeled **Medium**
+- Exactly one insight labeled **Low**
+- Do not duplicate or omit any level; do not use any other impact label
+
+Order insights from highest to lowest impact (High, then Medium, then Low).
 
 Format each insight as:
-**[Impact Level: High/Medium/Low]** Insight text here.
+**[Impact Level: High]** Insight text here.
+**[Impact Level: Medium]** Insight text here.
+**[Impact Level: Low]** Insight text here.
 """
 
 VIZ_AGENT_SYSTEM = """You are a data visualization expert. Generate Python matplotlib code to visualize key findings.
