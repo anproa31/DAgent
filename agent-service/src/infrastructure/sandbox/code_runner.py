@@ -7,6 +7,7 @@ import httpx
 
 from config.settings import CODE_RUNNER_URL
 from utils.agent_logger import get_logger
+from utils.sql_sanitize import clean_sql_for_execution
 
 logger = get_logger("code_runner")
 
@@ -46,6 +47,7 @@ async def execute_sql(
     ``result_variable`` in the session, so visualisation/insight agents
     can reference it later by name.
     """
+    sql = clean_sql_for_execution(sql)
     logger.info("execute_sql session=%s var=%s sql=%r", session_id, result_variable, sql[:200] if sql else "")
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:

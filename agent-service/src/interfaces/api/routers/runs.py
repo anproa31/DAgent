@@ -23,6 +23,7 @@ from orchestration.workflows.run_executor import (
     run_graph,
     sse_event_generator,
 )
+from utils.sql_sanitize import clean_sql_for_execution
 
 router = APIRouter()
 
@@ -77,8 +78,9 @@ async def approve_sql(run_id: str, body: ApproveRequest):
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
 
-    run.approval_data = {"approved": True, "sql": body.sql or run.sql_draft}
-    run.sql_draft = body.sql or run.sql_draft
+    sql = clean_sql_for_execution(body.sql or run.sql_draft or "")
+    run.approval_data = {"approved": True, "sql": sql}
+    run.sql_draft = sql
     run.approval_event.set()
     return ApproveResponse(success=True)
 
@@ -89,7 +91,7 @@ async def reject_sql(run_id: str, body: RejectRequest):
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
 
-    edited_sql = body.sql if body.sql else run.sql_draft
+    edited_sql = clean_sql_for_execution(body.sql if body.sql else run.sql_draft or "")
     run.approval_data = {"approved": False, "reason": body.reason, "sql": edited_sql}
     run.sql_draft = edited_sql
     run.sql_rejection_reason = body.reason
