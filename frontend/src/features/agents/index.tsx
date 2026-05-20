@@ -28,7 +28,7 @@ import {
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { Mic, Pencil, Check, X } from 'lucide-react'
+import { Pencil, Check, X } from 'lucide-react'
 import {
   createSession,
   startRun,
@@ -793,15 +793,6 @@ export default function AgentsPage() {
             onSelectedChange={setSelectedTables}
             placeholder='Select tables'
           />
-          <Button
-            type='button'
-            variant='ghost'
-            size='icon'
-            className='text-muted-foreground hover:text-foreground h-8 w-8'
-            title='Voice input'
-          >
-            <Mic className='h-4 w-4' />
-          </Button>
         </AIInputTools>
         <AIInputSubmit
           disabled={!isRunning && (!query.trim() || !model || !tables?.length)}
