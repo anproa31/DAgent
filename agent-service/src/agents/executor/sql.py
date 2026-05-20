@@ -8,6 +8,7 @@ from langgraph.types import interrupt
 
 from agents.shared.observations import create_observation
 from agents.shared.state import AgentState
+from orchestration.streaming import make_delta_emitter
 from utils.agent_logger import get_logger
 from utils.llm_client import chat_complete, get_async_client
 from utils.prompts import SQL_AGENT_SYSTEM, format_semantic_context_for_prompt
@@ -18,6 +19,25 @@ logger = get_logger("sql_agent")
 
 async def sql_agent_node(state: AgentState) -> dict:
     logger.info("enter query=%r", state["query"][:80])
+
+    # Short-circuit: SQL already approved and data fetched — skip regeneration.
+    # This prevents the planner from triggering a duplicate HITL interrupt when
+    # it re-routes to sql after the data is already available.
+    if state.get("sql_approved") and state.get("result_var_names"):
+        logger.info("SQL already executed — returning cached observation")
+        obs = create_observation(
+            agent_name="sql",
+            status="success",
+            summary="SQL already executed — data available in df_result",
+            artifacts={"sql_draft": state.get("sql_draft", ""), "sql_approved": True},
+            error=None,
+        )
+        return {
+            "current_agent": "sql",
+            "sql_approved": True,
+            "agent_steps": state.get("agent_steps", []) + ["sql"],
+            "last_observation": obs,
+        }
 
     client = get_async_client(state.get("base_url", ""), state.get("api_key", ""))
     model = state.get("model", "")
@@ -58,7 +78,14 @@ async def sql_agent_node(state: AgentState) -> dict:
         )
 
     try:
-        raw = await chat_complete(client, model, messages, temperature=0.1, log_tag="sql_agent")
+        raw = await chat_complete(
+            client,
+            model,
+            messages,
+            temperature=0.1,
+            log_tag="sql_agent",
+            on_delta=make_delta_emitter(state.get("run_id", ""), "sql"),
+        )
     except Exception as e:
         logger.error("LLM error: %s", e)
         obs = create_observation(

@@ -1,22 +1,19 @@
 import { useState } from 'react'
-import { Pencil, Check, X } from 'lucide-react'
+import { Pencil, Check, X, Brain, Code2, Play, ChevronRight, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { WorkflowStepTracker, deriveVisibleSteps } from '@/components/agents/WorkflowStepTracker'
 import { AnswerBlock, StreamingAnswerBlock } from '@/components/agents/MessageStream'
 import { ReportContent } from '@/features/analysis-report/components/report-content'
-import type { ActionStep } from '@/types/report'
+import type { SidePanelContent } from '@/features/analysis-report/components/side-panel'
 import type { ReportContent as ReportContentType } from '@/hooks/use-analysis'
 import type { AgentRun } from '@/stores/agentStore'
 
 export interface AgentRunItemProps {
   run: AgentRun
   runIndex: number
-  onShowSidePanel: (c: {
-    type: 'code' | 'table' | 'step'
-    content: string
-    stepData?: ActionStep
-  }) => void
+  onShowSidePanel: (c: SidePanelContent) => void
   onEditPrompt: (params: { index: number; query: string }) => Promise<void> | void
   onBeginEditPrompt?: () => void
   canEdit: boolean
@@ -42,6 +39,12 @@ export function AgentRunItem({
   const [editValue, setEditValue] = useState(run.query)
 
   const visibleSteps = deriveVisibleSteps(run.currentAgent, run.agentSteps, run.phase)
+
+  const showThinkingCard = isActive || run.thinkingSegments.length > 0
+  const lastSegment = run.thinkingSegments[run.thinkingSegments.length - 1]
+  const thinkingPreview = lastSegment
+    ? lastSegment.text.replace(/\s+/g, ' ').trim().slice(0, 90)
+    : ''
 
   const answerStatus = showReport
     ? ('done' as const)
@@ -140,6 +143,72 @@ export function AgentRunItem({
 
       {isActive && visibleSteps.length > 0 && (
         <WorkflowStepTracker steps={visibleSteps} className='mb-4' />
+      )}
+
+      {(showThinkingCard || run.executions.length > 0) && (
+        <div className='mb-4 space-y-2'>
+          {showThinkingCard && (
+            <button
+              type='button'
+              onClick={() => onShowSidePanel({ type: 'thinking', runId: run.runId })}
+              className='group border-border/50 hover:border-border hover:bg-accent/50 flex w-full cursor-pointer items-center justify-between rounded-lg border p-3 text-left transition-all duration-200'
+            >
+              <div className='flex min-w-0 flex-1 items-center gap-3'>
+                <div className='bg-primary/10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full'>
+                  <Brain className='text-primary h-4 w-4' />
+                </div>
+                <div className='min-w-0 flex-1'>
+                  <p className='text-foreground text-sm font-medium'>Thinking</p>
+                  <p className='text-muted-foreground truncate text-xs'>
+                    {thinkingPreview || 'View the model’s reasoning'}
+                  </p>
+                </div>
+              </div>
+              {isActive ? (
+                <Loader2 className='text-primary h-4 w-4 shrink-0 animate-spin' />
+              ) : (
+                <ChevronRight className='text-muted-foreground h-4 w-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100' />
+              )}
+            </button>
+          )}
+
+          {run.executions.map((ex) => {
+            const Icon = ex.kind === 'sql' ? Code2 : Play
+            const label = ex.kind === 'sql' ? 'SQL execution' : 'Python execution'
+            const codePreview = ex.code.replace(/\s+/g, ' ').trim().slice(0, 90)
+            return (
+              <button
+                key={ex.id}
+                type='button'
+                onClick={() =>
+                  onShowSidePanel({ type: 'execution', runId: run.runId, executionId: ex.id })
+                }
+                className='group border-border/50 hover:border-border hover:bg-accent/50 flex w-full cursor-pointer items-center justify-between rounded-lg border p-3 text-left transition-all duration-200'
+              >
+                <div className='flex min-w-0 flex-1 items-center gap-3'>
+                  <div className='bg-primary/10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full'>
+                    <Icon className='text-primary h-4 w-4' />
+                  </div>
+                  <div className='min-w-0 flex-1'>
+                    <div className='flex items-center gap-2'>
+                      <p className='text-foreground text-sm font-medium'>{label}</p>
+                      <Badge
+                        variant={ex.status === 'error' ? 'destructive' : 'secondary'}
+                        className='text-[10px] uppercase'
+                      >
+                        {ex.status}
+                      </Badge>
+                    </div>
+                    <p className='text-muted-foreground truncate font-mono text-xs'>
+                      {codePreview || 'View code & log'}
+                    </p>
+                  </div>
+                </div>
+                <ChevronRight className='text-muted-foreground h-4 w-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100' />
+              </button>
+            )
+          })}
+        </div>
       )}
 
       <div className='space-y-3'>

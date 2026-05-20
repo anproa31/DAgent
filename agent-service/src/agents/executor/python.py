@@ -10,6 +10,7 @@ from agents.executor.python_risk import HIGH, MEDIUM, assess_python_risk
 from agents.shared.data_discovery import extract_data_discovery_error
 from agents.shared.observations import create_observation, observation_from_tool_result
 from agents.shared.state import AgentState
+from orchestration.streaming import make_delta_emitter
 from tools.executor import run_tool
 from utils.agent_logger import get_logger
 from utils.llm_client import chat_complete, get_async_client
@@ -20,6 +21,22 @@ logger = get_logger("python_agent")
 
 async def python_agent_node(state: AgentState) -> dict:
     logger.info("enter query=%r", state["query"][:80])
+
+    # Short-circuit: Python code already executed and data is available.
+    if state.get("python_code") and state.get("result_var_names"):
+        logger.info("Python already executed — returning cached observation")
+        obs = create_observation(
+            agent_name="python",
+            status="success",
+            summary="Python already executed — data available in df_result",
+            artifacts={"python_code": state.get("python_code", "")},
+            error=None,
+        )
+        return {
+            "current_agent": "python",
+            "agent_steps": state.get("agent_steps", []) + ["python"],
+            "last_observation": obs,
+        }
 
     client = get_async_client(state.get("base_url", ""), state.get("api_key", ""))
     model = state.get("model", "")
@@ -32,7 +49,14 @@ async def python_agent_node(state: AgentState) -> dict:
     ]
 
     try:
-        raw = await chat_complete(client, model, messages, temperature=0.2, log_tag="python_agent")
+        raw = await chat_complete(
+            client,
+            model,
+            messages,
+            temperature=0.2,
+            log_tag="python_agent",
+            on_delta=make_delta_emitter(state.get("run_id", ""), "python"),
+        )
     except Exception as exc:
         logger.error("LLM error: %s", exc)
         obs = create_observation(
@@ -146,6 +170,7 @@ async def python_agent_node(state: AgentState) -> dict:
         "python_code": python_code,
         "data_summary": data_summary,
         "result_var_names": ["df_result"],
+        "error": "",
         "agent_steps": state.get("agent_steps", []) + ["python"],
         "last_observation": obs,
     }

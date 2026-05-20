@@ -20,6 +20,7 @@ _EXPLORE_PATTERNS: List[re.Pattern] = [
 ]
 
 _STEP_DESCRIPTIONS = {
+    "exec": "Fetch/analyze data — executor picks SQL or Python for the task",
     "sql": "Fetch data via DuckDB SQL against registered datasources",
     "python": "Run Python analysis (pandas/numpy/scipy) against sandbox data",
     "eda": "Exploratory data analysis — distributions, correlations, quality checks",
@@ -50,13 +51,20 @@ def select_orchestration_mode(
     *,
     is_replan: bool = False,
 ) -> OrchestrationMode:
-    """Pick how strictly the planner must follow the orchestrator's plan."""
+    """Pick how strictly the planner must follow the orchestrator's plan.
+
+    LIGHT_ANALYTICAL and VIZ_ONLY use FIXED — the pipeline is already minimal and
+    correct; letting the planner freely adapt would risk adding unnecessary steps.
+    Strong ANALYTICAL queries use AUTO_PLAN so the planner can extend the plan when
+    observations warrant it.
+    """
     if is_replan:
         return "EXPLORE"
     if detect_explore_intent(query):
         return "EXPLORE"
     if intent == "ANALYTICAL":
         return "AUTO_PLAN"
+    # LIGHT_ANALYTICAL / VIZ_ONLY / RETRIEVAL all get FIXED
     return "FIXED"
 
 
@@ -68,7 +76,7 @@ def build_execution_plan(
     """Convert a normalized pipeline into a dependency-aware execution plan."""
     worker_steps = [step for step in pipeline if step not in _TERMINAL_ACTIONS]
     if not worker_steps:
-        worker_steps = [execution_mode or "sql"]
+        worker_steps = ["exec"]
 
     plan: List[PlanStep] = []
     for index, action in enumerate(worker_steps):

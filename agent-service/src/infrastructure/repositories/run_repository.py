@@ -30,6 +30,8 @@ async def create_run(
         insights=None,
         report_content=None,
         agent_steps=None,
+        thinking_segments=None,
+        executions=None,
     )
     db.add(row)
     await db.commit()
@@ -67,6 +69,8 @@ def run_row_to_report_payload(row: AgentRun) -> Dict[str, Any]:
     agent_steps = row.agent_steps if isinstance(row.agent_steps, list) else []
     if not isinstance(content, list):
         content = []
+    thinking_segments = row.thinking_segments if isinstance(row.thinking_segments, list) else []
+    executions = row.executions if isinstance(row.executions, list) else []
 
     return {
         "done": row.done,
@@ -80,4 +84,6 @@ def run_row_to_report_payload(row: AgentRun) -> Dict[str, Any]:
         "insights": row.insights,
         "content": content,
         "agent_steps": agent_steps,
+        "thinking_segments": thinking_segments,
+        "executions": executions,
     }

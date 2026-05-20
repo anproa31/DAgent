@@ -48,6 +48,24 @@ export interface StartRunResponse {
   error?: string
 }
 
+export interface ThinkingSegment {
+  id: string
+  agent: string
+  step: number
+  text: string
+}
+
+export interface ExecutionEntry {
+  id: string
+  kind: 'sql' | 'python'
+  code: string
+  log: string
+  columns: string[]
+  rows: number
+  status: 'success' | 'error'
+  error: string
+}
+
 export interface RunReport {
   done: boolean
   error?: string
@@ -60,6 +78,8 @@ export interface RunReport {
   insights?: string
   content: ReportBlock[]
   agent_steps: string[]
+  thinking_segments?: ThinkingSegment[]
+  executions?: ExecutionEntry[]
 }
 
 export type { ReportBlock }
@@ -99,6 +119,31 @@ export interface WebDatasourceProposal {
 
 export interface AnswerChunkEvent {
   content: string
+}
+
+export interface ThinkingChunkEvent {
+  run_id: string
+  agent: string
+  step: number
+  delta: string
+}
+
+export interface ExecutionResultEvent {
+  run_id: string
+  id: string
+  kind: 'sql' | 'python'
+  code: string
+  log: string
+  columns: string[]
+  rows: number
+  status: 'success' | 'error'
+  error: string
+}
+
+export interface PythonReviewEvent {
+  code: string
+  risk: string
+  query: string
 }
 
 export interface DoneEvent {
@@ -163,11 +208,11 @@ export const startRun = async (
 export const approveSQL = async (
   runId: string,
   sql?: string,
-  opts?: { selected_urls?: string[]; name?: string }
+  opts?: { selected_urls?: string[]; name?: string; code?: string }
 ): Promise<{ success: boolean }> => {
   const res = await agentClient.post<{ success: boolean }>(
     `/agent/runs/${runId}/approve`,
-    { sql, selected_urls: opts?.selected_urls, name: opts?.name }
+    { sql, selected_urls: opts?.selected_urls, name: opts?.name, code: opts?.code }
   )
   return res.data
 }
@@ -176,11 +221,12 @@ export const rejectSQL = async (
   runId: string,
   reason: string,
   sql?: string,
-  selected_urls?: string[]
+  selected_urls?: string[],
+  code?: string
 ): Promise<{ success: boolean }> => {
   const res = await agentClient.post<{ success: boolean }>(
     `/agent/runs/${runId}/reject`,
-    { reason, sql, selected_urls }
+    { reason, sql, selected_urls, code }
   )
   return res.data
 }
@@ -224,9 +270,12 @@ export const generateTitle = async (body: GenerateTitleRequest): Promise<string>
 
 export interface SSEHandlers {
   onThinking?: (data: ThinkingEvent) => void
+  onThinkingChunk?: (data: ThinkingChunkEvent) => void
   onAgentUpdate?: (data: AgentUpdateEvent) => void
   onSqlGenerated?: (data: SqlGeneratedEvent) => void
   onWebDatasourceProposed?: (data: WebDatasourceProposal) => void
+  onPythonReviewRequired?: (data: PythonReviewEvent) => void
+  onExecutionResult?: (data: ExecutionResultEvent) => void
   onAnswerChunk?: (data: AnswerChunkEvent) => void
   onTitleUpdated?: (data: TitleUpdatedEvent) => void
   onDone?: (data: DoneEvent) => void
@@ -250,6 +299,10 @@ export function streamRun(runId: string, handlers: SSEHandlers): EventSource {
     handlers.onThinking?.(parse(e.data))
   })
 
+  es.addEventListener('thinking_chunk', (e: MessageEvent) => {
+    handlers.onThinkingChunk?.(parse(e.data))
+  })
+
   es.addEventListener('agent_update', (e: MessageEvent) => {
     handlers.onAgentUpdate?.(parse(e.data))
   })
@@ -260,6 +313,14 @@ export function streamRun(runId: string, handlers: SSEHandlers): EventSource {
 
   es.addEventListener('web_datasource_proposed', (e: MessageEvent) => {
     handlers.onWebDatasourceProposed?.(parse(e.data))
+  })
+
+  es.addEventListener('python_review_required', (e: MessageEvent) => {
+    handlers.onPythonReviewRequired?.(parse(e.data))
+  })
+
+  es.addEventListener('execution_result', (e: MessageEvent) => {
+    handlers.onExecutionResult?.(parse(e.data))
   })
 
   es.addEventListener('answer_chunk', (e: MessageEvent) => {

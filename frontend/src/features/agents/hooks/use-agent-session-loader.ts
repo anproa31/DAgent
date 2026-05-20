@@ -51,9 +51,50 @@ export function useAgentSessionLoader({
       storeSnap.sessionId === sessionFromUrl &&
       storeSnap.runs.every((r: AgentRun) => r.sessionId === sessionFromUrl)
 
-    if (runsMatchSession) return
-
     let cancelled = false
+
+    const attachStreamIfActive = () => {
+      if (cancelled || esRef.current) return
+
+      const { runs, isCancelled } = useAgentStore.getState()
+      const activeRun = [...runs]
+        .reverse()
+        .find(
+          (r) =>
+            r.sessionId === sessionFromUrl &&
+            !isCancelled(r.runId) &&
+            ['starting', 'thinking', 'running', 'awaiting_approval'].includes(r.phase)
+        )
+
+      if (activeRun) {
+        setActiveRunId(activeRun.runId)
+        setSubmitStatus('streaming')
+        esRef.current = streamRun(
+          activeRun.runId,
+          buildHandlers({
+            runId: activeRun.runId,
+            sessionId: sessionFromUrl,
+            onTitleUpdated: updateHistoryTitle,
+            setSubmitStatus,
+            setItemLoading,
+            refreshSessions: refreshAgentSessionsFromServer,
+          })
+        )
+      } else {
+        setItemLoading(sessionFromUrl, false)
+        setSubmitStatus('ready')
+      }
+    }
+
+    if (runsMatchSession) {
+      attachStreamIfActive()
+      return () => {
+        cancelled = true
+        esRef.current?.close()
+        esRef.current = null
+      }
+    }
+
     esRef.current?.close()
     esRef.current = null
 
@@ -128,6 +169,8 @@ export function useAgentSessionLoader({
 
     return () => {
       cancelled = true
+      esRef.current?.close()
+      esRef.current = null
     }
   }, [
     sessionFromUrl,

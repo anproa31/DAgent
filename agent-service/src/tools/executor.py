@@ -7,13 +7,16 @@ from tools.registry import get_tool
 from tools.schemas import ToolResult
 
 
-async def run_tool(session_id: str, name: str, **kwargs: Any) -> ToolResult:
-    tool = get_tool(name)
+async def run_tool(session_id: str, tool_name: str, **kwargs: Any) -> ToolResult:
+    # ``tool_name`` (not ``name``) so a tool whose own parameter is called
+    # ``name`` (e.g. get_variable, register_web_data) can be passed via kwargs
+    # without colliding with this positional argument.
+    tool = get_tool(tool_name)
     if tool is None:
         return ToolResult(
             success=False,
-            error=f"Unknown tool: {name}",
-            chunks=[{"output_type": "text", "content": f"Unknown tool: {name}"}],
+            error=f"Unknown tool: {tool_name}",
+            chunks=[{"output_type": "text", "content": f"Unknown tool: {tool_name}"}],
         )
 
     missing = [
@@ -21,9 +24,9 @@ async def run_tool(session_id: str, name: str, **kwargs: Any) -> ToolResult:
         for param in tool.parameters.values()
         if param.required and kwargs.get(param.name) in (None, "")
     ]
-    if name in ("discover_web_data", "propose_web_data") and not kwargs.get("query") and not kwargs.get("url"):
+    if tool_name in ("discover_web_data", "propose_web_data") and not kwargs.get("query") and not kwargs.get("url"):
         missing.append("query")
-    if name == "register_web_data" and not kwargs.get("urls"):
+    if tool_name == "register_web_data" and not kwargs.get("urls"):
         missing.append("urls")
     if missing:
         msg = f"Missing required parameters: {', '.join(missing)}"
@@ -40,7 +43,7 @@ async def run_tool(session_id: str, name: str, **kwargs: Any) -> ToolResult:
         elif param.default is not None:
             call_kwargs[param.name] = param.default
 
-    if name == "execute_sql" and "result_variable" not in call_kwargs:
+    if tool_name == "execute_sql" and "result_variable" not in call_kwargs:
         call_kwargs["result_variable"] = "df_result"
 
     return await tool.handler(**call_kwargs)

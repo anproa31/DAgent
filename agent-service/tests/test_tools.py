@@ -67,6 +67,22 @@ class TestToolExecutor(unittest.TestCase):
         self.assertEqual(result.error, "SyntaxError")
         self.assertTrue(get_tool("execute_python") is not None)
 
+    def test_get_variable_accepts_name_kwarg(self) -> None:
+        """Regression: tool dispatch param must be ``tool_name``, not ``name``."""
+        mock_var = {
+            "result": [{"type": "table", "data": {"columns": ["a"], "rows": [[1]]}}]
+        }
+        with patch(
+            "tools.handlers.get_variable",
+            new=AsyncMock(return_value=mock_var),
+        ):
+            result = asyncio.run(
+                run_tool("session-1", "get_variable", name="df_result")
+            )
+
+        self.assertTrue(result.success)
+        self.assertEqual(result.data.get("variable_name"), "df_result")
+
 
 if __name__ == "__main__":
     unittest.main()

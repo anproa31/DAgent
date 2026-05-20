@@ -171,6 +171,8 @@ async def get_report(run_id: str):
             insights=run.insights or None,
             content=run.report_content,
             agent_steps=run.agent_steps,
+            thinking_segments=run.thinking_segments,
+            executions=run.executions,
         )
 
     async with async_session_maker() as db:
