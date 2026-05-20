@@ -24,6 +24,15 @@ import {
 } from "@/components/ui/popover";
 import { Command, CommandInput, CommandItem } from "@/components/ui/command";
 import { Check } from "lucide-react";
+const TEXTAREA_LINE_HEIGHT_PX = 20;
+const TEXTAREA_VERTICAL_PADDING_PX = 24;
+
+/** Visible lines before the textarea scrolls internally. */
+const DEFAULT_VISIBLE_LINES = 10;
+
+const textareaHeightForLines = (lines: number) =>
+  lines * TEXTAREA_LINE_HEIGHT_PX + TEXTAREA_VERTICAL_PADDING_PX;
+
 type UseAutoResizeTextareaProps = {
   minHeight: number;
   maxHeight?: number;
@@ -92,13 +101,19 @@ export const AIInputTextarea = ({
   className,
   placeholder = 'Ask about data...',
   minHeight = 48,
-  maxHeight = 164,
+  maxHeight = textareaHeightForLines(DEFAULT_VISIBLE_LINES),
+  value,
   ...props
 }: AIInputTextareaProps) => {
   const { textareaRef, adjustHeight } = useAutoResizeTextarea({
     minHeight,
     maxHeight,
   });
+
+  useEffect(() => {
+    adjustHeight();
+  }, [value, adjustHeight]);
+
   const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
@@ -114,6 +129,7 @@ export const AIInputTextarea = ({
         'w-full resize-none rounded-none border-none p-3 shadow-none outline-none ring-0',
         'bg-transparent dark:bg-transparent',
         'focus-visible:ring-0',
+        'field-sizing-fixed min-h-0 overflow-y-auto',
         className
       )}
       name="message"
@@ -124,6 +140,7 @@ export const AIInputTextarea = ({
       onKeyDown={handleKeyDown}
       placeholder={placeholder}
       ref={textareaRef}
+      value={value}
       {...props}
     />
   );

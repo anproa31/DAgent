@@ -12,6 +12,9 @@ RUN npm ci
 # Copy source code from the app directory
 COPY frontend/ .
 
+# Preset prompts (imported via @sample-dataset in vite.config.ts)
+COPY sample_dataset/ /sample_dataset/
+
 # Set build-time environment variable for Vite
 ARG VITE_SERVER_URL
 ENV VITE_SERVER_URL=${VITE_SERVER_URL}

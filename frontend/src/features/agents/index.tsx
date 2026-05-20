@@ -43,6 +43,7 @@ import {
 import type { RunReport } from '@/api/agentApi'
 import { useSharedAnalysisHistory } from '@/context/analysis-history-context'
 import { useAgentStore, type AgentRun, type RunPhase } from '@/stores/agentStore'
+import { AnalysisPresets } from '@/features/agents/analysis-presets'
 
 const agentsRouteApi = getRouteApi('/_authenticated/agents')
 
@@ -501,6 +502,14 @@ export default function AgentsPage() {
     [setPreferredModel]
   )
 
+  const handleApplyPreset = useCallback(
+    ({ prompt, tables: presetTables }: { prompt: string; tables: string[] }) => {
+      setQuery(prompt)
+      setSelectedTables(presetTables)
+    },
+    []
+  )
+
   useEffect(() => {
     if (tables?.length && selectedTables.length === 0) {
       const storeSnap = useAgentStore.getState()
@@ -829,6 +838,11 @@ export default function AgentsPage() {
               </p>
             </div>
             <div className='w-full max-w-3xl'>
+              <AnalysisPresets
+                availableTableNames={(tables ?? []).map((t) => t.name)}
+                onApply={handleApplyPreset}
+                disabled={isRunning}
+              />
               {inputBlock}
             </div>
           </div>
