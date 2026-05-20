@@ -1,5 +1,5 @@
 import { useMemo, useCallback } from 'react'
-import { IconDatabase, IconPlus, IconClock } from '@tabler/icons-react'
+import { IconDatabase, IconClock, IconPin } from '@tabler/icons-react'
 import { deleteSession } from '@/api/agentApi'
 import { useTableList } from '@/hooks/use-table-list'
 import { type SidebarData } from '@/components/layout/types'
@@ -17,7 +17,7 @@ export const useSidebarData = (): {
   error: Error | null
 } => {
   const { data: tables, isLoading: tablesLoading, error: tablesError } = useTableList()
-  const { history, removeFromHistory } = useSharedAnalysisHistory()
+  const { history, pinnedIds, isPinned, togglePin, removeFromHistory } = useSharedAnalysisHistory()
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -49,6 +49,27 @@ export const useSidebarData = (): {
   const sidebarData = useMemo((): SidebarData | null => {
     if (!tables) return null
 
+    const agentHistory = history.filter(
+      (item: AnalysisHistoryItem) => item.kind === 'agent'
+    )
+
+    const toNavItem = (item: AnalysisHistoryItem) => ({
+      title: item.query,
+      url: '/agents' as const,
+      search: { session: item.id } as Record<string, unknown>,
+      id: item.id,
+      onDelete: (id: string) => handleDelete(id),
+      onPinToggle: (id: string) => togglePin(id),
+      isPinned: isPinned(item.id),
+      ...(item.isLoading ? { icon: Bars } : {}),
+    })
+
+    const pinnedSet = new Set(pinnedIds)
+    const pinnedItems = agentHistory
+      .filter((item) => pinnedSet.has(item.id))
+      .map(toNavItem)
+    const historyItems = agentHistory.map(toNavItem)
+
     return {
       navGroups: [
         {
@@ -60,26 +81,22 @@ export const useSidebarData = (): {
               url: '/datasources',
             },
             {
-              title: 'New Datasource',
-              action: 'openModal',
-              icon: IconPlus,
+              title: 'Pinned',
+              icon: IconPin,
+              items: [
+                ...pinnedItems,
+                ...(pinnedItems.length === 0
+                  ? [{ title: 'No pinned conversations', url: '/agents' as const, placeholder: true }]
+                  : []),
+              ],
             },
             {
               title: 'History',
               icon: IconClock,
               items: [
-                ...history
-                  .filter((item: AnalysisHistoryItem) => item.kind === 'agent')
-                  .map((item: AnalysisHistoryItem) => ({
-                    title: item.query,
-                    url: '/agents' as any,
-                    search: { session: item.id } as Record<string, unknown>,
-                    id: item.id,
-                    onDelete: (id: string) => handleDelete(id),
-                    ...(item.isLoading ? { icon: Bars } : {}),
-                  })),
-                ...(history.filter((i: AnalysisHistoryItem) => i.kind === 'agent').length === 0
-                  ? [{ title: 'No analyses yet', url: '#' as any }]
+                ...historyItems,
+                ...(historyItems.length === 0
+                  ? [{ title: 'No analyses yet', url: '/agents' as const, placeholder: true }]
                   : []),
               ],
             },
@@ -87,7 +104,7 @@ export const useSidebarData = (): {
         },
       ],
     }
-  }, [tables, history, handleDelete])
+  }, [tables, history, pinnedIds, isPinned, togglePin, handleDelete])
 
   return {
     data: sidebarData,

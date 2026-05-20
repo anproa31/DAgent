@@ -6,6 +6,10 @@ interface BaseNavItem {
   icon?: React.ElementType
   id?: string
   onDelete?: (id: string) => void
+  onPinToggle?: (id: string) => void
+  isPinned?: boolean
+  /** Non-navigable placeholder row (e.g. empty state). */
+  placeholder?: boolean
 }
 
 type NavLink = BaseNavItem & {

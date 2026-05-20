@@ -15,6 +15,9 @@ export interface AnalysisHistoryItem {
 
 interface AnalysisHistoryContextType {
   history: AnalysisHistoryItem[]
+  pinnedIds: string[]
+  isPinned: (id: string) => boolean
+  togglePin: (id: string) => void
   addToHistory: (id: string, query: string, kind?: AnalysisHistoryKind) => void
   /** Same sidebar row: swap agent session id (e.g. after edit → fork new backend session). */
   replaceAgentHistorySession: (
@@ -47,7 +50,29 @@ export const useSharedAnalysisHistory = () => {
 }
 
 const STORAGE_KEY = 'analysis_history'
+const PINNED_STORAGE_KEY = 'analysis_pinned'
 const MAX_HISTORY_ITEMS = 1000
+
+function loadPinnedIds(): string[] {
+  try {
+    const stored = localStorage.getItem(PINNED_STORAGE_KEY)
+    if (!stored) return []
+    const parsed = JSON.parse(stored) as unknown
+    return Array.isArray(parsed)
+      ? parsed.filter((id): id is string => typeof id === 'string')
+      : []
+  } catch {
+    return []
+  }
+}
+
+function savePinnedIds(ids: string[]) {
+  try {
+    localStorage.setItem(PINNED_STORAGE_KEY, JSON.stringify(ids))
+  } catch (error) {
+    console.error('Failed to save pinned conversations:', error)
+  }
+}
 
 function mergeAgentSessionsFromServer(
   base: AnalysisHistoryItem[],
@@ -78,6 +103,7 @@ function mergeAgentSessionsFromServer(
 
 const useAnalysisHistory = () => {
   const [history, setHistory] = useState<AnalysisHistoryItem[]>([])
+  const [pinnedIds, setPinnedIds] = useState<string[]>(() => loadPinnedIds())
 
   // Hydrate from localStorage, then merge persisted agent sessions from the backend
   useEffect(() => {
@@ -192,9 +218,32 @@ const useAnalysisHistory = () => {
     }
   }, [saveToStorage])
 
+  const isPinned = useCallback(
+    (id: string) => pinnedIds.includes(id),
+    [pinnedIds]
+  )
+
+  const togglePin = useCallback((id: string) => {
+    setPinnedIds((prev) => {
+      const next = prev.includes(id)
+        ? prev.filter((pid) => pid !== id)
+        : [id, ...prev]
+      savePinnedIds(next)
+      return next
+    })
+  }, [])
+
   const replaceAgentHistorySession = useCallback(
     (previousSessionId: string, nextSessionId: string, query: string) => {
       if (!previousSessionId?.trim() || !nextSessionId?.trim()) return
+      setPinnedIds((prev) => {
+        if (!prev.includes(previousSessionId)) return prev
+        const next = prev.map((pid) =>
+          pid === previousSessionId ? nextSessionId : pid
+        )
+        savePinnedIds(next)
+        return next
+      })
       setHistory((prevHistory) => {
         const withoutDupNext = prevHistory.filter(
           (item) => !(item.kind === 'agent' && item.id === nextSessionId)
@@ -237,6 +286,12 @@ const useAnalysisHistory = () => {
   // Remove a specific item from history
   const removeFromHistory = useCallback(
     (id: string) => {
+      setPinnedIds((prev) => {
+        if (!prev.includes(id)) return prev
+        const next = prev.filter((pid) => pid !== id)
+        savePinnedIds(next)
+        return next
+      })
       setHistory((prevHistory) => {
         const newHistory = prevHistory.filter((item) => item.id !== id)
         saveToStorage(newHistory)
@@ -271,6 +326,9 @@ const useAnalysisHistory = () => {
 
   return {
     history,
+    pinnedIds,
+    isPinned,
+    togglePin,
     setItemLoading,
     addToHistory,
     replaceAgentHistorySession,
