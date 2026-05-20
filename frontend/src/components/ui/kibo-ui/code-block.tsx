@@ -239,12 +239,17 @@ const wordHighlightClassNames = cn(
   'dark:[&_.highlighted-word]:!bg-blue-500/10'
 )
 const codeBlockClassName = cn(
-  'mt-0 bg-background text-sm',
+  'mt-0 bg-background',
   '[&_pre]:py-4',
   '[&_.shiki]:!bg-[var(--shiki-bg)]',
   '[&_code]:w-full',
-  '[&_code]:grid',
-  '[&_code]:overflow-x-auto',
+  '[&_code]:block',
+  '[&_code]:overflow-visible',
+  '[&_code]:break-words',
+  '[&_code]:break-all',
+  '[&_pre]:whitespace-pre-wrap',
+  '[&_pre]:text-xs',
+  '[&_code]:text-xs',
   '[&_code]:bg-transparent',
   '[&_.line]:px-4',
   '[&_.line]:w-full',
@@ -483,8 +488,8 @@ export const CodeBlockCopyButton = ({
 type CodeBlockFallbackProps = HTMLAttributes<HTMLDivElement>
 const CodeBlockFallback = ({ children, ...props }: CodeBlockFallbackProps) => (
   <div {...props}>
-    <pre className='w-full'>
-      <code>
+    <pre className='w-full break-words whitespace-pre-wrap'>
+      <code className='break-words'>
         {children
           ?.toString()
           .split('\n')
@@ -551,6 +556,7 @@ export const CodeBlockContent = ({
   themes,
   language,
   syntaxHighlighting = true,
+  className,
   ...props
 }: CodeBlockContentProps) => {
   const [html, setHtml] = useState<string | null>(null)
@@ -568,9 +574,10 @@ export const CodeBlockContent = ({
   }
   return (
     <div
-      // biome-ignore lint/security/noDangerouslySetInnerHtml: "Kinda how Shiki works"
+      style={{ overflowWrap: 'break-word', wordBreak: 'break-all' }}
       dangerouslySetInnerHTML={{ __html: html }}
       {...props}
+      className={cn('whitespace-pre-wrap break-words', className)}
     />
   )
 }

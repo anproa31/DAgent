@@ -104,7 +104,7 @@ export function ReportContent({
       </div>
 
 
-      <div ref={printRef} className='p-0 m-0'>
+      <div ref={printRef} className='p-0 m-0 space-y-4'>
         {/* Steps Section */}
         {steps && steps.length > 0 && (
           <div className='space-y-2'>
