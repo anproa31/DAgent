@@ -1,45 +1,52 @@
-"""Datasource registry: persistent metadata + sandbox synchronisation.
-
-Replaces the legacy ``DataService`` that copied every uploaded file into
-PostgreSQL. The registry simply records *where the data lives* (path on the
-shared volume or remote connection details) and asks DuckDB to introspect
-the schema. The sandbox is told to mount the same data via the
-``/register-datasource`` endpoint so SQL and Python code can both reach it.
-"""
+"""Datasource registry: persistent metadata + sandbox synchronisation."""
 from __future__ import annotations
 
-import json
+import asyncio
 import logging
 import os
+import re
 import shutil
-import tempfile
 import threading
 import uuid
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-import re
-
-import httpx
 from fastapi import HTTPException, UploadFile
 
+from .core.config import get_settings
 from .dce_introspection import (
     IntrospectionOutcome,
     introspect_database_datasource,
     introspect_file_datasource,
-    normalize_identifier,
     parse_connection_string,
 )
+from .infrastructure.external.context_engine_client import ContextEngineClient
+from .infrastructure.external.sandbox_client import SandboxClient
+from .infrastructure.persistence.datasource_repository import DatasourceRepository
+from .models.datasource import (
+    DatasourceDatabaseType,
+    DatasourceFileType,
+    DatasourceKind,
+    DatasourceRecord,
+    DatasourceTableInfo,
+)
+
+logger = logging.getLogger(__name__)
+
+_EXTENSION_MAP: Dict[str, DatasourceFileType] = {
+    ".csv": DatasourceFileType.CSV,
+    ".tsv": DatasourceFileType.CSV,
+    ".xlsx": DatasourceFileType.EXCEL,
+    ".xls": DatasourceFileType.EXCEL,
+    ".db": DatasourceFileType.SQLITE,
+    ".sqlite": DatasourceFileType.SQLITE,
+    ".sqlite3": DatasourceFileType.SQLITE,
+    ".parquet": DatasourceFileType.PARQUET,
+}
 
 
 def _extract_columns_from_markdown(markdown: str, view_name: str) -> List[str]:
-    """Pull column names out of the per-table markdown block.
-
-    Each table block starts with ``## Table: <name>`` and lists its
-    columns in a Markdown table whose first cell is the column name.
-    """
     if not markdown:
         return []
 
@@ -59,8 +66,6 @@ def _extract_columns_from_markdown(markdown: str, view_name: str) -> List[str]:
             continue
         if not stripped.startswith("|"):
             continue
-        # Header row first ("| Column | Type | ..."), then separator ("|---|---|"),
-        # then data rows. We want only the data rows' first cell.
         if not seen_header:
             seen_header = True
             continue
@@ -70,38 +75,6 @@ def _extract_columns_from_markdown(markdown: str, view_name: str) -> List[str]:
         if cell:
             columns.append(cell)
     return columns
-from .models.datasource import (
-    DatasourceDatabaseType,
-    DatasourceFileType,
-    DatasourceKind,
-    DatasourceRecord,
-    DatasourceTableInfo,
-)
-
-logger = logging.getLogger(__name__)
-
-
-DATASOURCE_ROOT = os.environ.get("DATASOURCE_ROOT", "/data/datasources")
-REGISTRY_PATH = os.path.join(DATASOURCE_ROOT, "registry.json")
-FILES_DIR = os.path.join(DATASOURCE_ROOT, "files")
-CODE_RUNNER_URL = os.environ.get("CODE_RUNNER_URL", "http://sandbox:8001/")
-CONTEXT_ENGINE_URL = os.environ.get("CONTEXT_ENGINE_URL", "http://context-engine:8002/")
-
-
-# ---------------------------------------------------------------------------
-# File-type detection
-# ---------------------------------------------------------------------------
-
-_EXTENSION_MAP: Dict[str, DatasourceFileType] = {
-    ".csv": DatasourceFileType.CSV,
-    ".tsv": DatasourceFileType.CSV,
-    ".xlsx": DatasourceFileType.EXCEL,
-    ".xls": DatasourceFileType.EXCEL,
-    ".db": DatasourceFileType.SQLITE,
-    ".sqlite": DatasourceFileType.SQLITE,
-    ".sqlite3": DatasourceFileType.SQLITE,
-    ".parquet": DatasourceFileType.PARQUET,
-}
 
 
 def detect_file_type(filename: str) -> DatasourceFileType:
@@ -114,138 +87,36 @@ def detect_file_type(filename: str) -> DatasourceFileType:
     return _EXTENSION_MAP[suffix]
 
 
-# ---------------------------------------------------------------------------
-# Context engine integration
-# ---------------------------------------------------------------------------
-
-
-async def _fetch_context(datasource_name: str, outcome: IntrospectionOutcome) -> None:
-    """Call the context-engine microservice to populate outcome.context_markdown.
-
-    Failures are logged but non-fatal — the outcome is still usable without context.
-    """
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.post(
-                CONTEXT_ENGINE_URL.rstrip("/") + "/build",
-                json={
-                    "datasource_name": datasource_name,
-                    "tables": [
-                        {
-                            "name": tbl.name,
-                            "columns": [
-                                {"name": c, "type": t, "nullable": n}
-                                for c, t, n in tbl.columns
-                            ],
-                            "row_count": tbl.row_count,
-                            "samples": tbl.samples,
-                            "column_stats": {
-                                cn: {
-                                    "distinct_count": cs.distinct_count,
-                                    "null_count": cs.null_count,
-                                    "min_value": cs.min_value,
-                                    "max_value": cs.max_value,
-                                    "top_values": cs.top_values,
-                                }
-                                for cn, cs in tbl.column_stats.items()
-                            },
-                        }
-                        for tbl in outcome.tables
-                    ],
-                },
-            )
-            response.raise_for_status()
-            data = response.json()
-            outcome.context_markdown = data.get("context_summary", "")
-    except Exception as exc:
-        logger.warning("Context-engine unavailable, skipping context build: %s", exc)
-
-
-# ---------------------------------------------------------------------------
-# Registry
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class _RegistryState:
-    records: Dict[str, DatasourceRecord]
-
-
 class DatasourceRegistry:
-    """Thread-safe in-process registry persisted to ``registry.json``.
+    """Thread-safe datasource registry backed by JSON persistence."""
 
-    The registry is the single source of truth for *what datasources exist*.
-    Schema introspection is delegated to :mod:`dce_introspection`, and the
-    sandbox is notified via :meth:`sync_sandbox` so it can mount the same
-    DuckDB views.
-    """
-
-    def __init__(self, root: str = DATASOURCE_ROOT):
-        self._root = root
-        self._files_dir = os.path.join(root, "files")
-        self._registry_path = os.path.join(root, "registry.json")
+    def __init__(
+        self,
+        repository: Optional[DatasourceRepository] = None,
+        sandbox: Optional[SandboxClient] = None,
+        context_engine: Optional[ContextEngineClient] = None,
+    ) -> None:
+        self._repo = repository or DatasourceRepository()
+        self._sandbox = sandbox or SandboxClient()
+        self._context_engine = context_engine or ContextEngineClient()
         self._lock = threading.RLock()
 
-        os.makedirs(self._files_dir, exist_ok=True)
-        self._state = _RegistryState(records=self._load_state())
-
-    # ---- persistence -----------------------------------------------------
-
-    def _load_state(self) -> Dict[str, DatasourceRecord]:
-        if not os.path.exists(self._registry_path):
-            return {}
-        try:
-            with open(self._registry_path, "r", encoding="utf-8") as f:
-                raw = json.load(f)
-        except Exception as exc:
-            logger.warning("Failed to load registry file, starting empty: %s", exc)
-            return {}
-
-        records: Dict[str, DatasourceRecord] = {}
-        for ds_id, payload in raw.items():
-            try:
-                records[ds_id] = DatasourceRecord(**payload)
-            except Exception as exc:
-                logger.warning("Skipping invalid registry entry %s: %s", ds_id, exc)
-        return records
-
-    def _save_state(self) -> None:
-        serialised = {
-            ds_id: json.loads(record.model_dump_json())
-            for ds_id, record in self._state.records.items()
-        }
-        tmp = self._registry_path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(serialised, f, indent=2, default=str)
-        os.replace(tmp, self._registry_path)
-
-    # ---- public API ------------------------------------------------------
-
     def list_datasources(self) -> List[DatasourceRecord]:
-        with self._lock:
-            return list(self._state.records.values())
+        return self._repo.list_all()
 
     def get_datasource(self, datasource_id: str) -> Optional[DatasourceRecord]:
-        with self._lock:
-            return self._state.records.get(datasource_id)
+        return self._repo.get(datasource_id)
 
     def all_view_names(self) -> List[str]:
-        """Flat list of all DuckDB view names exposed by every datasource."""
-        with self._lock:
-            return [v for rec in self._state.records.values() for v in rec.view_names]
+        return [v for rec in self._repo.list_all() for v in rec.view_names]
 
-    async def add_file_datasource(
-        self,
-        upload: UploadFile,
-    ) -> DatasourceRecord:
-        """Persist an uploaded file, introspect it, register the metadata."""
+    async def add_file_datasource(self, upload: UploadFile) -> DatasourceRecord:
         if not upload.filename:
             raise HTTPException(status_code=400, detail="Uploaded file has no filename")
 
         file_type = detect_file_type(upload.filename)
-
         datasource_id = str(uuid.uuid4())
-        ds_dir = os.path.join(self._files_dir, datasource_id)
+        ds_dir = os.path.join(self._repo.files_dir, datasource_id)
         os.makedirs(ds_dir, exist_ok=True)
         stored_path = os.path.join(ds_dir, upload.filename)
 
@@ -270,24 +141,19 @@ class DatasourceRegistry:
             shutil.rmtree(ds_dir, ignore_errors=True)
             raise HTTPException(status_code=400, detail=f"Introspection failed: {exc}") from exc
 
-        # Build semantic context via the context-engine microservice
-        await _fetch_context(Path(upload.filename).stem, outcome)
+        outcome.context_markdown = await self._context_engine.build_context(
+            Path(upload.filename).stem, outcome
+        )
 
         record = self._build_record(
             datasource_id=datasource_id,
             name=Path(upload.filename).stem,
             kind=DatasourceKind.FILE,
             type_value=file_type.value,
-            config={
-                "path": stored_path,
-                "original_filename": upload.filename,
-            },
+            config={"path": stored_path, "original_filename": upload.filename},
             outcome=outcome,
         )
-
-        with self._lock:
-            self._state.records[datasource_id] = record
-            self._save_state()
+        self._repo.save(record)
 
         sync_error = await self._notify_sandbox_register(record, outcome.sql_snippets)
         if sync_error:
@@ -321,21 +187,18 @@ class DatasourceRegistry:
             for key, value in parsed.items():
                 if config.get(key) in (None, "") and value is not None:
                     config[key] = value
-
-        # Strip None values from outer config so the introspector sees a clean dict
         config = {k: v for k, v in config.items() if v is not None}
 
         try:
             outcome = introspect_database_datasource(
-                name=name,
-                db_type=db_type.value,
-                config=config,
+                name=name, db_type=db_type.value, config=config
             )
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=f"Connection or introspection failed: {exc}") from exc
+            raise HTTPException(
+                status_code=400, detail=f"Connection or introspection failed: {exc}"
+            ) from exc
 
-        # Build semantic context via the context-engine microservice
-        await _fetch_context(name, outcome)
+        outcome.context_markdown = await self._context_engine.build_context(name, outcome)
 
         record = self._build_record(
             datasource_id=str(uuid.uuid4()),
@@ -345,56 +208,39 @@ class DatasourceRegistry:
             config=config,
             outcome=outcome,
         )
+        self._repo.save(record)
 
-        with self._lock:
-            self._state.records[record.id] = record
-            self._save_state()
-
-        # Block until the sandbox confirms registration: callers expect the
-        # view to be queryable on return.
         sync_error = await self._notify_sandbox_register(record, outcome.sql_snippets)
         if sync_error:
             self._mark_sync_error(record.id, sync_error)
             record.error = sync_error
-
         return record
 
     async def delete_datasource(self, datasource_id: str) -> bool:
-        with self._lock:
-            record = self._state.records.pop(datasource_id, None)
-            if record is None:
-                return False
-            self._save_state()
+        record = self._repo.delete(datasource_id)
+        if record is None:
+            return False
 
         if record.kind == DatasourceKind.FILE:
             try:
                 stored_path = record.config.get("path")
                 if stored_path:
                     parent_dir = os.path.dirname(stored_path)
-                    if parent_dir.startswith(self._files_dir):
+                    if parent_dir.startswith(self._repo.files_dir):
                         shutil.rmtree(parent_dir, ignore_errors=True)
             except Exception as exc:
                 logger.warning("Failed to remove files for %s: %s", datasource_id, exc)
 
-        await self._notify_sandbox_unregister(record)
+        try:
+            await self._sandbox.unregister_datasource(record.id, record.view_names)
+        except Exception as exc:
+            logger.warning("Sandbox unregister failed for %s: %s", record.id, exc)
         return True
 
     def rebuild_all_views_snippets(self) -> List[Tuple[DatasourceRecord, List[str]]]:
-        """Re-introspect every datasource and return DDL snippets.
-
-        Used by the sandbox on startup to reconstruct its DuckDB state. The
-        original SQL snippets are not persisted in the registry (paths in the
-        DDL would go stale on path changes); regenerating them is cheap.
-
-        Side effect: the record's ``schema_markdown`` and ``tables`` are
-        refreshed so prompt context picks up any introspector improvements
-        (e.g. richer column profiling) without forcing the user to re-upload.
-        """
         rebuilt: List[Tuple[DatasourceRecord, List[str]]] = []
         dirty = False
-        with self._lock:
-            records = list(self._state.records.values())
-        for record in records:
+        for record in self._repo.list_all():
             try:
                 outcome = self._reintrospect(record)
             except Exception as exc:
@@ -415,23 +261,66 @@ class DatasourceRegistry:
                 or record.view_names != outcome.view_names
             )
             if schema_changed:
-                with self._lock:
-                    live = self._state.records.get(record.id)
-                    if live is not None:
-                        live.schema_markdown = outcome.schema_markdown
-                        live.view_names = outcome.view_names
-                        live.tables = new_tables
-                        record = live
+                self._repo.update(
+                    record.id,
+                    schema_markdown=outcome.schema_markdown,
+                    view_names=outcome.view_names,
+                    tables=new_tables,
+                )
+                record = self._repo.get(record.id) or record
                 dirty = True
 
             rebuilt.append((record, outcome.sql_snippets))
 
         if dirty:
-            with self._lock:
-                self._save_state()
+            pass  # updates already persisted via _repo.update
         return rebuilt
 
-    # ---- internals -------------------------------------------------------
+    async def notify_sandbox_register(
+        self,
+        record: DatasourceRecord,
+        sql_snippets: List[str],
+        *,
+        retries: int = 5,
+        backoff_seconds: float = 1.5,
+    ) -> Optional[str]:
+        return await self._notify_sandbox_register(
+            record, sql_snippets, retries=retries, backoff_seconds=backoff_seconds
+        )
+
+    def aggregate_schema_markdown(self, view_names: Optional[List[str]] = None) -> str:
+        records = self._repo.list_all()
+        included_views: set[str] = set()
+        parts: List[str] = []
+        for record in records:
+            if view_names is None:
+                if record.context_summary:
+                    parts.append(record.context_summary)
+                parts.append(f"# Datasource: {record.name} ({record.type})")
+                if record.schema_markdown:
+                    parts.append(record.schema_markdown)
+                included_views.update(record.view_names)
+                continue
+
+            relevant = [v for v in record.view_names if v in view_names]
+            if not relevant:
+                continue
+            if record.context_summary:
+                parts.append(record.context_summary)
+            parts.append(f"# Datasource: {record.name} ({record.type})")
+            if record.schema_markdown:
+                parts.append(record.schema_markdown)
+            included_views.update(record.view_names)
+
+        cross_hints = self._cross_datasource_join_hints(included_views)
+        if cross_hints:
+            parts.append("# Cross-datasource join candidates")
+            parts.append(
+                "Columns sharing a name across multiple views — likely join keys:"
+            )
+            parts.extend(cross_hints)
+
+        return "\n\n".join(parts)
 
     def _build_record(
         self,
@@ -473,22 +362,7 @@ class DatasourceRegistry:
                 file_path=record.config["path"],
             )
         return introspect_database_datasource(
-            name=record.name,
-            db_type=record.type,
-            config=record.config,
-        )
-
-    async def notify_sandbox_register(
-        self,
-        record: DatasourceRecord,
-        sql_snippets: List[str],
-        *,
-        retries: int = 5,
-        backoff_seconds: float = 1.5,
-    ) -> Optional[str]:
-        """Public wrapper around the registration call. See :meth:`_notify_sandbox_register`."""
-        return await self._notify_sandbox_register(
-            record, sql_snippets, retries=retries, backoff_seconds=backoff_seconds
+            name=record.name, db_type=record.type, config=record.config
         )
 
     async def _notify_sandbox_register(
@@ -499,25 +373,11 @@ class DatasourceRegistry:
         retries: int = 5,
         backoff_seconds: float = 1.5,
     ) -> Optional[str]:
-        """POST the registration payload to the sandbox with exponential-ish retry.
-
-        Returns ``None`` on success, or an error string on failure (after
-        exhausting retries). The sandbox may still be starting up while the
-        app is already serving uploads, so retrying smooths over that race
-        without surfacing a bogus error to the user.
-        """
-        import asyncio
-
         payload = self._build_register_payload(record, sql_snippets)
         last_error: Optional[str] = None
         for attempt in range(1, retries + 1):
             try:
-                async with httpx.AsyncClient(timeout=30.0) as client:
-                    response = await client.post(
-                        CODE_RUNNER_URL.rstrip("/") + "/register-datasource",
-                        json=payload,
-                    )
-                    response.raise_for_status()
+                await self._sandbox.register_datasource(payload)
                 return None
             except Exception as exc:
                 last_error = str(exc)
@@ -540,29 +400,14 @@ class DatasourceRegistry:
         return last_error
 
     def _mark_sync_error(self, datasource_id: str, error: str) -> None:
-        """Persist a sync error on the record so the UI/agent can surface it."""
-        with self._lock:
-            record = self._state.records.get(datasource_id)
-            if record is None:
-                return
-            record.error = error
-            self._save_state()
-
-    async def _notify_sandbox_unregister(self, record: DatasourceRecord) -> None:
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
-                    CODE_RUNNER_URL.rstrip("/") + "/unregister-datasource",
-                    json={"datasource_id": record.id, "view_names": record.view_names},
-                )
-                response.raise_for_status()
-        except Exception as exc:
-            logger.warning("Sandbox unregister failed for %s: %s", record.id, exc)
+        record = self._repo.get(datasource_id)
+        if record is None:
+            return
+        record.error = error
+        self._repo.save(record)
 
     def _build_register_payload(
-        self,
-        record: DatasourceRecord,
-        sql_snippets: List[str],
+        self, record: DatasourceRecord, sql_snippets: List[str]
     ) -> Dict[str, Any]:
         return {
             "datasource_id": record.id,
@@ -574,71 +419,18 @@ class DatasourceRegistry:
             "sql_snippets": sql_snippets,
         }
 
-    def aggregate_schema_markdown(self, view_names: Optional[List[str]] = None) -> str:
-        """Concatenated schema markdown for prompts.
-
-        ``view_names`` filters to specific tables/views if provided.
-        Cross-datasource join hints are appended at the end so the agent
-        can identify likely joins even when each CSV/table lives in its
-        own datasource.
-        """
-        with self._lock:
-            records = list(self._state.records.values())
-
-        included_views: set[str] = set()
-        parts: List[str] = []
-        for record in records:
-            if view_names is None:
-                if record.context_summary:
-                    parts.append(record.context_summary)
-                parts.append(f"# Datasource: {record.name} ({record.type})")
-                if record.schema_markdown:
-                    parts.append(record.schema_markdown)
-                included_views.update(record.view_names)
-                continue
-
-            relevant = [v for v in record.view_names if v in view_names]
-            if not relevant:
-                continue
-            if record.context_summary:
-                parts.append(record.context_summary)
-            parts.append(f"# Datasource: {record.name} ({record.type})")
-            # We currently store one combined markdown per datasource. Filtering
-            # by table within a datasource is best-effort: include the whole
-            # block if any view matches.
-            if record.schema_markdown:
-                parts.append(record.schema_markdown)
-            included_views.update(record.view_names)
-
-        cross_hints = self._cross_datasource_join_hints(included_views)
-        if cross_hints:
-            parts.append("# Cross-datasource join candidates")
-            parts.append(
-                "Columns sharing a name across multiple views — likely join keys:"
-            )
-            parts.extend(cross_hints)
-
-        return "\n\n".join(parts)
-
     def _cross_datasource_join_hints(self, included_views: set[str]) -> List[str]:
-        """Find column names that appear in more than one included view.
-
-        Each schema_markdown block lists columns in a Markdown table whose
-        first cell is the column name. We parse that line-by-line to avoid
-        introducing a separate column-index field on the record.
-        """
         if not included_views:
             return []
 
         col_to_views: Dict[str, set[str]] = {}
-        with self._lock:
-            records = list(self._state.records.values())
-
-        for record in records:
+        for record in self._repo.list_all():
             for table_info in record.tables:
                 if table_info.name not in included_views:
                     continue
-                for col in _extract_columns_from_markdown(record.schema_markdown, table_info.name):
+                for col in _extract_columns_from_markdown(
+                    record.schema_markdown, table_info.name
+                ):
                     col_to_views.setdefault(col.lower(), set()).add(table_info.name)
 
         hints: List[str] = []
@@ -649,7 +441,6 @@ class DatasourceRegistry:
         return hints
 
 
-# Module-level singleton — instantiated lazily so the data directory exists.
 _registry: Optional[DatasourceRegistry] = None
 _registry_lock = threading.Lock()
 
@@ -661,3 +452,19 @@ def get_registry() -> DatasourceRegistry:
             if _registry is None:
                 _registry = DatasourceRegistry()
     return _registry
+
+
+def reset_registry() -> None:
+    """Reset singleton registry (used in tests)."""
+    global _registry
+    with _registry_lock:
+        _registry = None
+
+
+# Backward-compatible module-level constants
+_settings = get_settings()
+DATASOURCE_ROOT = _settings.datasource_root
+REGISTRY_PATH = _settings.registry_path
+FILES_DIR = _settings.files_dir
+CODE_RUNNER_URL = _settings.code_runner_url
+CONTEXT_ENGINE_URL = _settings.context_engine_url
