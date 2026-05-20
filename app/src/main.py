@@ -1,16 +1,22 @@
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routers import (
-    data_router,
+from .api.routes import (
+    analysis_router,
+    datasources_router,
     health_router,
     internal_router,
-    model_list_router,
-    new_analysis_router,
+    models_router,
+    v1_router,
 )
-from .utils.prompts import set_db_schema
+from .core.exceptions import register_exception_handlers
+from .core.lifespan import lifespan
 
-app = FastAPI()
+logging.basicConfig(level=logging.INFO)
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -20,15 +26,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register routers
-app.include_router(data_router)
+register_exception_handlers(app)
+
+app.include_router(datasources_router)
 app.include_router(health_router)
-app.include_router(new_analysis_router)
-app.include_router(model_list_router)
+app.include_router(analysis_router)
+app.include_router(models_router)
 app.include_router(internal_router)
-
-
-@app.on_event("startup")
-async def startup_event() -> None:
-    """Warm the prompt cache from the datasource registry."""
-    set_db_schema()
+app.include_router(v1_router)
