@@ -1,10 +1,8 @@
-"""Reflection critic parsing and report context helpers."""
+"""Report context helpers for the Reflection pattern."""
 
 from __future__ import annotations
 
-import json
-import re
-from typing import Any, Dict, List, Optional
+from typing import Optional
 
 
 def flatten_report_content(report_content: list) -> str:
@@ -54,8 +52,9 @@ def build_data_context_from_history(planner_history: list) -> str:
                 parts.append(f"Result: {observation['summary'][:300]}")
 
             artifacts = observation.get("artifacts", {})
-            if artifacts.get("row_count"):
-                parts.append(f"Rows: {artifacts['row_count']}")
+            row_count = artifacts.get("row_count") or artifacts.get("rows")
+            if row_count is not None:
+                parts.append(f"Rows: {row_count}")
             if artifacts.get("data_summary"):
                 parts.append(f"Data summary: {artifacts['data_summary'][:200]}")
 
@@ -90,49 +89,3 @@ def extract_data_discovery_error_from_history(planner_history: list) -> Optional
             return artifacts["data_discovery_error"]
 
     return None
-
-
-def is_schema_complaint(complaint: str, datasources: list) -> bool:
-    complaint_lower = complaint.lower()
-
-    schema_keywords = [
-        "table",
-        "column",
-        "datasource",
-        "view",
-        "schema",
-        "not exist",
-        "not found",
-        "unavailable",
-        "missing",
-        "hr_employee_data",
-    ]
-
-    has_schema_keyword = any(kw in complaint_lower for kw in schema_keywords)
-
-    available_tables = set()
-    for ds in datasources:
-        for view in ds.get("view_names", []):
-            available_tables.add(view.lower())
-
-    table_mentions = re.findall(r"['\"]?(\w+_?table\w*)['\"]?", complaint_lower)
-    for table in table_mentions:
-        if table not in available_tables:
-            return True
-
-    return has_schema_keyword
-
-
-def parse_reflection_response(raw: str) -> dict:
-    try:
-        match = re.search(r"\{.*\}", raw, re.DOTALL)
-        if match:
-            return json.loads(match.group())
-    except Exception:
-        pass
-
-    raw_lower = raw.lower()
-    if "fail" in raw_lower or "reject" in raw_lower or "incomplete" in raw_lower:
-        return {"pass": False, "feedback": raw[:500]}
-
-    return {"pass": True, "feedback": raw[:500]}
