@@ -8,6 +8,7 @@ from control_layer.schemas import TASK_TYPES, TaskObject
 from execution_layer.base import ExecutionResult, ExecutionStatus, SessionConfig
 from execution_layer.python_runtime import PythonRuntime, queue_depth
 from execution_layer.runtime_factory import RuntimeFactory
+from infrastructure.config import MAX_EXECUTION_TIME, MAX_MEMORY
 from infrastructure.logging_setup import logger
 
 
@@ -49,8 +50,8 @@ class ControlLayer:
         runtime = self._get_python_runtime()
         config = SessionConfig(
             language=task.config.get("language", "python"),
-            timeout=task.config.get("timeout", 30),
-            max_memory=task.config.get("max_memory", 256 * 1024 * 1024),
+            timeout=task.config.get("timeout", MAX_EXECUTION_TIME),
+            max_memory=task.config.get("max_memory", MAX_MEMORY),
             max_cpus=task.config.get("max_cpus", 1),
             network_disabled=task.config.get("network_disabled", False),
             environment_vars=task.config.get("env", {}),

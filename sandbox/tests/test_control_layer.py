@@ -66,6 +66,30 @@ class TestControlLayer(unittest.TestCase):
         self.assertTrue(payload.get("ok"))
         self.assertEqual(payload["rows"], 1)
 
+    def test_execute_code_timeout(self) -> None:
+        timeout_session = "test-session-timeout"
+        connect_result = self.control.handle_task(
+            TaskObject(
+                task_type="connect",
+                session_id=timeout_session,
+                config={"timeout": 1},
+            )
+        )
+        self.assertEqual(connect_result.status.value, "success")
+
+        code_result = self.control.handle_task(
+            TaskObject(
+                task_type="execute_code",
+                session_id=timeout_session,
+                code="import time\ntime.sleep(2)",
+            )
+        )
+        self.assertEqual(code_result.status.value, "timeout")
+
+        self.control.handle_task(
+            TaskObject(task_type="disconnect", session_id=timeout_session)
+        )
+
 
 class TestSerialization(unittest.TestCase):
     def test_dataframe_serializes_as_table(self) -> None:

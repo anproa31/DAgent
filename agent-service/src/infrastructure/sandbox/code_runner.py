@@ -1,4 +1,4 @@
-"""HTTP client for the sandbox: code, sql, variable retrieval."""
+"""HTTP client for the sandbox execution service (used by the tool layer)."""
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
@@ -7,7 +7,6 @@ import httpx
 
 from config.settings import CODE_RUNNER_URL
 from utils.agent_logger import get_logger
-from utils.sql_sanitize import clean_sql_for_execution
 
 logger = get_logger("code_runner")
 
@@ -47,7 +46,6 @@ async def execute_sql(
     ``result_variable`` in the session, so visualisation/insight agents
     can reference it later by name.
     """
-    sql = clean_sql_for_execution(sql)
     logger.info("execute_sql session=%s var=%s sql=%r", session_id, result_variable, sql[:200] if sql else "")
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -100,17 +98,26 @@ async def get_variable(session_id: str, var_name: str) -> Optional[Dict[str, Any
 
 async def get_variable_results(session_id: str, var_names: List[str]) -> List[Dict[str, Any]]:
     """Retrieve multiple variables and return as content blocks."""
+    from tools.chunks import content_blocks_from_variable_result
+
     content: List[Dict[str, Any]] = []
     for name in var_names:
         result = await get_variable(session_id, name)
-        if result and "result" in result:
-            for item in result["result"]:
-                var_type = item.get("type", "string")
-                data = item.get("data")
-                if var_type == "image":
-                    content.append({"type": "image", "base64": data})
-                elif var_type == "table":
-                    content.append({"type": "table", "table": data})
-                else:
-                    content.append({"type": "variable", "data": data})
+        content.extend(content_blocks_from_variable_result(result))
     return content
+
+
+async def rollback_session(session_id: str) -> Dict[str, Any]:
+    """Restore session variables to the pre-execution snapshot."""
+    logger.info("rollback session=%s", session_id)
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{CODE_RUNNER_URL}/rollback",
+                json={"id": session_id},
+            )
+            response.raise_for_status()
+            return response.json()
+    except Exception as exc:
+        logger.error("rollback session=%s failed: %s", session_id, exc)
+        return {"error": str(exc)}

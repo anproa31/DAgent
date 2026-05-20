@@ -16,3 +16,5 @@ MAX_PROCESSES = int(os.environ.get("SANDBOX_MAX_PROCESSES", "10"))
 # python = in-process analytics runtime (default)
 # docker/podman/local reserved for future container runtimes
 SANDBOX_RUNTIME = os.environ.get("SANDBOX_RUNTIME", "python")
+SESSION_IDLE_SECONDS = int(os.environ.get("SANDBOX_SESSION_IDLE_SECONDS", "3600"))
+SESSION_CLEANUP_INTERVAL = int(os.environ.get("SANDBOX_SESSION_CLEANUP_INTERVAL", "300"))

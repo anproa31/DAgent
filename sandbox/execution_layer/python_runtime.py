@@ -17,10 +17,13 @@ from execution_layer.base import (
     SandboxSession,
     SessionConfig,
 )
+from execution_layer.limits import ExecutionTimeoutError, run_with_timeout
 from execution_layer.utils import EnvironmentDetector
 from execution.serialization import to_response_payload
+from infrastructure.config import MAX_EXECUTION_TIME, MAX_MEMORY
 from infrastructure.duckdb import get_connection
 from infrastructure.logging_setup import logger
+from security.utils import SecurityUtils
 
 _QUEUE_LOCK = threading.Lock()
 _QUEUE_DEPTH = 0
@@ -94,26 +97,52 @@ class PythonSandboxSession(SandboxSession):
         from security.code_sanitizer import sanitize_user_code
 
         sanitized = sanitize_user_code(code)
-        increment_queue()
-        start = time.time()
+        timeout = self.config.timeout or MAX_EXECUTION_TIME
+        warnings = SecurityUtils.validate_code(sanitized, "python")
+        if warnings:
+            logger.warning(
+                "security warnings session=%s: %s",
+                self.session_id,
+                "; ".join(warnings),
+            )
+
         with self._lock:
             self._rollback = self._localvars.copy()
             self._running = True
-            try:
-                exec(sanitized, self._localvars)
-            except Exception as exc:
+            localvars = self._localvars
+
+        increment_queue()
+        start = time.time()
+        try:
+            run_with_timeout(lambda: exec(sanitized, localvars), timeout)
+        except ExecutionTimeoutError as exc:
+            with self._lock:
                 self._running = False
-                decrement_queue()
-                logger.error("execute session=%s failed: %s", self.session_id, exc)
-                return ExecutionResult(
-                    status=ExecutionStatus.ERROR,
-                    error=str(exc),
-                    output=traceback.format_exc(),
-                    execution_time=time.time() - start,
-                    exit_code=1,
-                    payload={"trace": traceback.format_exc(), "id": self.session_id},
-                )
-            finally:
+            decrement_queue()
+            logger.error("execute session=%s timed out after %ss", self.session_id, timeout)
+            return ExecutionResult(
+                status=ExecutionStatus.TIMEOUT,
+                error=str(exc),
+                output=f"Execution timed out ({timeout}s limit)",
+                execution_time=time.time() - start,
+                exit_code=124,
+                payload={"id": self.session_id, "timeout": timeout},
+            )
+        except Exception as exc:
+            with self._lock:
+                self._running = False
+            decrement_queue()
+            logger.error("execute session=%s failed: %s", self.session_id, exc)
+            return ExecutionResult(
+                status=ExecutionStatus.ERROR,
+                error=str(exc),
+                output=traceback.format_exc(),
+                execution_time=time.time() - start,
+                exit_code=1,
+                payload={"trace": traceback.format_exc(), "id": self.session_id},
+            )
+        finally:
+            with self._lock:
                 self._running = False
 
         decrement_queue()
@@ -141,10 +170,25 @@ class PythonSandboxSession(SandboxSession):
             )
 
         self.update_last_accessed()
+        timeout = self.config.timeout or MAX_EXECUTION_TIME
         increment_queue()
         start = time.time()
         try:
-            df = get_connection().execute(sql).fetchdf()
+            df = run_with_timeout(
+                lambda: get_connection().execute(sql).fetchdf(),
+                timeout,
+            )
+        except ExecutionTimeoutError as exc:
+            decrement_queue()
+            logger.error("execute_sql session=%s timed out: %s", self.session_id, exc)
+            return ExecutionResult(
+                status=ExecutionStatus.TIMEOUT,
+                error=str(exc),
+                output=f"SQL execution timed out ({timeout}s limit)",
+                execution_time=time.time() - start,
+                exit_code=124,
+                payload={"id": self.session_id, "sql": sql, "timeout": timeout},
+            )
         except Exception as exc:
             decrement_queue()
             logger.error("execute_sql session=%s failed: %s", self.session_id, exc)
@@ -259,6 +303,10 @@ class PythonSandboxSession(SandboxSession):
             }
 
 
+def _default_session_config() -> SessionConfig:
+    return SessionConfig(timeout=MAX_EXECUTION_TIME, max_memory=MAX_MEMORY)
+
+
 class PythonRuntime(SandboxRuntime):
     """In-process Python runtime (default for analytics sandbox)."""
 
@@ -283,7 +331,7 @@ class PythonRuntime(SandboxRuntime):
         existing = self.sessions.get(session_id)
         if existing is not None:
             return existing  # type: ignore[return-value]
-        return self.create_session(session_id, config or SessionConfig())
+        return self.create_session(session_id, config or _default_session_config())
 
     def destroy_session(self, session_id: str) -> bool:
         session = self.sessions.pop(session_id, None)
