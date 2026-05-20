@@ -2,6 +2,7 @@ fastapi
 uvicorn[standard]
 httpx
 pydantic
+psutil
 
 # Multi-datasource query engine
 duckdb>=1.0.0
