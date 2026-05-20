@@ -21,13 +21,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../ui/alert-dialog'
-import {
-  NavCollapsible,
-  NavItem,
-  NavLink,
-  NavAction,
-  type NavGroup,
-} from './types'
+import { NavCollapsible, NavItem, NavLink, NavAction, type NavGroup } from './types'
 
 const NavBadge = ({ children }: { children: ReactNode }) => (
   <Badge className='rounded-full px-1 py-0 text-xs'>{children}</Badge>
@@ -73,7 +67,8 @@ export function NavGroup({
   const { state, isMobile } = useSidebar()
   const href = useLocation({ select: (location) => location.href })
 
-  const databaseItem = items.find(item => item.title === 'Database')
+  const datasourceItem = items.find(item => item.title === 'All Datasources')
+  const newDatasourceItem = items.find(item => item.title === 'New Datasource')
   const historyItem = items.find(item => item.title === 'History')
 
   const isCollapsed = state === 'collapsed' && !isMobile
@@ -81,42 +76,36 @@ export function NavGroup({
 
   return (
     <SidebarGroup className='min-h-0 flex flex-col gap-0'>
-      {title && <SidebarGroupLabel>{title}</SidebarGroupLabel>}
+      {title && !isCollapsed && <SidebarGroupLabel>{title}</SidebarGroupLabel>}
 
-      {/* Database section - fixed, not scrollable */}
-      {databaseItem && (
+      {/* Datasources section */}
+      {(datasourceItem || newDatasourceItem) && (
         <>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton className='h-8 pointer-events-none'>
-                {databaseItem.icon && <databaseItem.icon />}
-                {!isCollapsed && <span>Database</span>}
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-          {!isCollapsed && databaseItem.items && databaseItem.items.map((subItem) => {
-            const key = `${subItem.title}-${'url' in subItem ? subItem.url : subItem.action}`
-            return (
-              <SidebarMenu key={key}>
-                <SidebarMenuItem>
-                  {'action' in subItem && subItem.action === 'openModal' ? (
-                    <SidebarMenuButton onClick={() => onModalOpen?.(true)}>
-                      {subItem.icon && <subItem.icon />}
-                      <span>{subItem.title}</span>
-                    </SidebarMenuButton>
-                  ) : (
-                    <SidebarMenuButton asChild>
-                      <Link to={subItem.url} search={subItem.search as any}>
-                        {subItem.icon && <subItem.icon />}
-                        <span>{subItem.title}</span>
-                        {subItem.badge && <NavBadge>{subItem.badge}</NavBadge>}
-                      </Link>
-                    </SidebarMenuButton>
-                  )}
-                </SidebarMenuItem>
-              </SidebarMenu>
-            )
-          })}
+          {datasourceItem && 'url' in datasourceItem && (
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild tooltip={datasourceItem.title}>
+                  <Link to={datasourceItem.url}>
+                    {datasourceItem.icon && <datasourceItem.icon />}
+                    {!isCollapsed && <span>{datasourceItem.title}</span>}
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          )}
+          {newDatasourceItem && 'action' in newDatasourceItem && (
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  tooltip={newDatasourceItem.title}
+                  onClick={() => onModalOpen?.(true)}
+                >
+                  {newDatasourceItem.icon && <newDatasourceItem.icon />}
+                  {!isCollapsed && <span>{newDatasourceItem.title}</span>}
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          )}
         </>
       )}
 
@@ -138,11 +127,11 @@ export function NavGroup({
               <div className='overflow-auto min-h-0 flex-1 max-h-[calc(100vh-300px)]'>
                 <SidebarMenu>
                   {historyItem.items.map((subItem) => {
-                    const key = `${subItem.title}-${'url' in subItem ? subItem.url : subItem.action}`
+                    const isAction = 'action' in subItem && subItem.action === 'openModal'
 
                     return (
-                      <SidebarMenuItem key={key}>
-                        {'action' in subItem && subItem.action === 'openModal' ? (
+                      <SidebarMenuItem key={isAction ? `${subItem.title}-action` : subItem.url}>
+                        {isAction ? (
                           <SidebarMenuButton onClick={() => onModalOpen?.(true)}>
                             {subItem.icon && <subItem.icon />}
                             <span>{subItem.title}</span>

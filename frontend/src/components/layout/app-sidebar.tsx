@@ -1,7 +1,6 @@
 import React from 'react'
 import logo from '@/assets/olazc9.svg'
 import { useSidebarData } from '@/hooks/use-sidebar-data'
-import { useTableList } from '@/hooks/use-table-list'
 import {
   Sidebar,
   SidebarContent,
@@ -9,53 +8,37 @@ import {
   SidebarRail,
   useSidebar,
 } from '@/components/ui/sidebar'
-import { DatabaseConnectionModal } from '@/components/layout/database-connection-modal'
 import { NavGroup } from '@/components/layout/nav-group'
 import NewAnalysisBtn from './new-analysis-btn'
+import { DatabaseConnectionModal } from '@/components/layout/database-connection-modal'
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-    const { open } = useSidebar()
+    const { state, isMobile } = useSidebar()
   const { data: sidebarData, isLoading, error } = useSidebarData()
   const [modalOpen, setModalOpen] = React.useState(false)
-  const {
-    data: tables,
-    isLoading: tablesLoading,
-    error: tablesError,
-  } = useTableList()
 
-  // Open modal when tables is empty on first startup
-  React.useEffect(() => {
-    if (tables && tables.length === 0 && !tablesLoading && !tablesError) {
-      setModalOpen(true)
-    }
-  }, [tables, tablesLoading, tablesError])
-
-  if (isLoading) {
+  if (isLoading || !sidebarData) {
     return (
       <Sidebar collapsible='icon' {...props}>
         <SidebarHeader>
           <div className='px-3 py-2'>Loading...</div>
         </SidebarHeader>
         <SidebarContent>
-          <div className='px-3 py-2'>Loading table list...</div>
+          <div className='px-3 py-2'>Preparing...</div>
         </SidebarContent>
         <SidebarRail />
       </Sidebar>
     )
   }
 
-  if (error || !sidebarData) {
+  if (error) {
     return (
       <Sidebar collapsible='icon' {...props}>
         <SidebarHeader>
           <div className='px-3 py-2'>Error</div>
         </SidebarHeader>
         <SidebarContent>
-          <div className='px-3 py-2 text-red-500'>
-            Failed to load table list.
-            <br />
-            Please ensure the server is running.
-          </div>
+          <div className='px-3 py-2 text-red-500'>Failed to load.</div>
         </SidebarContent>
         <SidebarRail />
       </Sidebar>
@@ -66,8 +49,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     <>
       <Sidebar collapsible='icon' {...props}>
         <SidebarHeader>
-          <div className={open ? 'px-3 py-2' : 'flex items-center justify-center py-2'}>
-            <img src={logo} alt='data-analysis-agent logo' className={open ? 'h-8 w-auto' : 'h-6 w-6'} />
+          <div className={isMobile || state === 'expanded' ? 'px-3 py-2' : 'flex items-center justify-center py-2'}>
+            <img src={logo} alt='data-analysis-agent logo' className={isMobile || state === 'expanded' ? 'h-8 w-auto' : 'h-6 w-6'} />
           </div>
         </SidebarHeader>
         <SidebarContent>

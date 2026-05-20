@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as AuthenticatedDatasourcesRouteImport } from './routes/_authenticated/datasources'
 import { Route as AuthenticatedAgentsRouteImport } from './routes/_authenticated/agents'
 import { Route as errors503RouteImport } from './routes/(errors)/503'
 import { Route as errors500RouteImport } from './routes/(errors)/500'
@@ -29,6 +30,12 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedDatasourcesRoute =
+  AuthenticatedDatasourcesRouteImport.update({
+    id: '/datasources',
+    path: '/datasources',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedAgentsRoute = AuthenticatedAgentsRouteImport.update({
   id: '/agents',
   path: '/agents',
@@ -79,6 +86,7 @@ export interface FileRoutesByFullPath {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/agents': typeof AuthenticatedAgentsRoute
+  '/datasources': typeof AuthenticatedDatasourcesRoute
   '/': typeof AuthenticatedIndexRoute
   '/report/$reportId': typeof AuthenticatedReportReportIdRoute
   '/table/$tableName': typeof AuthenticatedTableTableNameRoute
@@ -90,6 +98,7 @@ export interface FileRoutesByTo {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/agents': typeof AuthenticatedAgentsRoute
+  '/datasources': typeof AuthenticatedDatasourcesRoute
   '/': typeof AuthenticatedIndexRoute
   '/report/$reportId': typeof AuthenticatedReportReportIdRoute
   '/table/$tableName': typeof AuthenticatedTableTableNameRoute
@@ -103,6 +112,7 @@ export interface FileRoutesById {
   '/(errors)/500': typeof errors500Route
   '/(errors)/503': typeof errors503Route
   '/_authenticated/agents': typeof AuthenticatedAgentsRoute
+  '/_authenticated/datasources': typeof AuthenticatedDatasourcesRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/report/$reportId': typeof AuthenticatedReportReportIdRoute
   '/_authenticated/table/$tableName': typeof AuthenticatedTableTableNameRoute
@@ -116,6 +126,7 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/agents'
+    | '/datasources'
     | '/'
     | '/report/$reportId'
     | '/table/$tableName'
@@ -127,6 +138,7 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/agents'
+    | '/datasources'
     | '/'
     | '/report/$reportId'
     | '/table/$tableName'
@@ -139,6 +151,7 @@ export interface FileRouteTypes {
     | '/(errors)/500'
     | '/(errors)/503'
     | '/_authenticated/agents'
+    | '/_authenticated/datasources'
     | '/_authenticated/'
     | '/_authenticated/report/$reportId'
     | '/_authenticated/table/$tableName'
@@ -167,6 +180,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/datasources': {
+      id: '/_authenticated/datasources'
+      path: '/datasources'
+      fullPath: '/datasources'
+      preLoaderRoute: typeof AuthenticatedDatasourcesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/agents': {
@@ -230,6 +250,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAgentsRoute: typeof AuthenticatedAgentsRoute
+  AuthenticatedDatasourcesRoute: typeof AuthenticatedDatasourcesRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedReportReportIdRoute: typeof AuthenticatedReportReportIdRoute
   AuthenticatedTableTableNameRoute: typeof AuthenticatedTableTableNameRoute
@@ -237,6 +258,7 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAgentsRoute: AuthenticatedAgentsRoute,
+  AuthenticatedDatasourcesRoute: AuthenticatedDatasourcesRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedReportReportIdRoute: AuthenticatedReportReportIdRoute,
   AuthenticatedTableTableNameRoute: AuthenticatedTableTableNameRoute,
