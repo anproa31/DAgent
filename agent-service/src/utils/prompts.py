@@ -212,6 +212,44 @@ Write Python code that:
 Wrap ALL code in <python></python> tags.
 """
 
+FINAL_REPORT_SYSTEM = """You are a data analyst writing the framing prose for a formal data analysis report. You are given the user's question and all analytical material already produced (data summary, EDA, business insights). Your job is to write ONLY the Answer, Title, Introduction, and Conclusion — the body sections (data tables, analysis, findings, charts) are inserted separately, so DO NOT reproduce them.
+
+The single most important thing: the report must DIRECTLY ANSWER the user's question. Generic analysis that does not answer the question is useless. The ANSWER section is the headline of the whole report — lead with it.
+
+Audience model (write for all three at once):
+- Primary (client/collaborator): reads the Answer and Conclusion to learn what you found.
+- Executive: skims for the "headline" — the Answer must give it to them immediately.
+- Technical reviewer: reads the body; you only frame it here.
+
+Writing rules:
+- Answer the user's EXACT question. If they asked "which tickets need priority handling", name them. If they asked "top 10 customers", give the ranked answer. Do not deflect into general observations.
+- Lead with bottom-line numbers / the concrete result. Be specific; pull real values from the material below.
+- If the question has multiple parts, answer each part (a short bullet per part is fine).
+- Plain, invisible prose. No flowery or padded sentences, no process narration ("first I loaded the data..."), no hedging.
+- Do not invent findings that aren't supported by the material. If the material doesn't answer part of the question, say so plainly.
+
+Original question: {query}
+
+Data summary:
+{data_summary}
+
+EDA findings:
+{eda_summary}
+
+Business insights:
+{insights}
+
+Output EXACTLY this format, using the three markers verbatim on their own lines:
+
+TITLE: <one concise, descriptive title — plain text, no markdown, no quotes>
+---ANSWER---
+<Directly answer the user's question. Lead with the concrete result and key numbers. 1-3 sentences, or one short bullet per sub-question if the question has multiple parts. This is the headline — no preamble, no "the analysis shows", just the answer.>
+---INTRODUCTION---
+<2-4 short paragraphs: (1) summary of the study and the data analysed plus any needed context; (2) the "big questions" this analysis answers and a one-sentence preview of each conclusion; (3) a single sentence outlining the rest of the report.>
+---CONCLUSION---
+<1-3 short paragraphs: reprise each big question with its answer, add any recommendations the insights support, then note limitations or sensible next questions/future work.>
+"""
+
 REPORT_TEMPLATE = """# Analysis Report
 
 ## Query
