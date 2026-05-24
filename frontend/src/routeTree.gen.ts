@@ -11,6 +11,8 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as AuthenticatedSkillsRouteImport } from './routes/_authenticated/skills'
+import { Route as AuthenticatedKnowledgeBaseRouteImport } from './routes/_authenticated/knowledge-base'
 import { Route as AuthenticatedDatasourcesRouteImport } from './routes/_authenticated/datasources'
 import { Route as AuthenticatedAgentsRouteImport } from './routes/_authenticated/agents'
 import { Route as errors503RouteImport } from './routes/(errors)/503'
@@ -30,6 +32,17 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedSkillsRoute = AuthenticatedSkillsRouteImport.update({
+  id: '/skills',
+  path: '/skills',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedKnowledgeBaseRoute =
+  AuthenticatedKnowledgeBaseRouteImport.update({
+    id: '/knowledge-base',
+    path: '/knowledge-base',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedDatasourcesRoute =
   AuthenticatedDatasourcesRouteImport.update({
     id: '/datasources',
@@ -87,6 +100,8 @@ export interface FileRoutesByFullPath {
   '/503': typeof errors503Route
   '/agents': typeof AuthenticatedAgentsRoute
   '/datasources': typeof AuthenticatedDatasourcesRoute
+  '/knowledge-base': typeof AuthenticatedKnowledgeBaseRoute
+  '/skills': typeof AuthenticatedSkillsRoute
   '/': typeof AuthenticatedIndexRoute
   '/report/$reportId': typeof AuthenticatedReportReportIdRoute
   '/table/$tableName': typeof AuthenticatedTableTableNameRoute
@@ -99,6 +114,8 @@ export interface FileRoutesByTo {
   '/503': typeof errors503Route
   '/agents': typeof AuthenticatedAgentsRoute
   '/datasources': typeof AuthenticatedDatasourcesRoute
+  '/knowledge-base': typeof AuthenticatedKnowledgeBaseRoute
+  '/skills': typeof AuthenticatedSkillsRoute
   '/': typeof AuthenticatedIndexRoute
   '/report/$reportId': typeof AuthenticatedReportReportIdRoute
   '/table/$tableName': typeof AuthenticatedTableTableNameRoute
@@ -113,6 +130,8 @@ export interface FileRoutesById {
   '/(errors)/503': typeof errors503Route
   '/_authenticated/agents': typeof AuthenticatedAgentsRoute
   '/_authenticated/datasources': typeof AuthenticatedDatasourcesRoute
+  '/_authenticated/knowledge-base': typeof AuthenticatedKnowledgeBaseRoute
+  '/_authenticated/skills': typeof AuthenticatedSkillsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/report/$reportId': typeof AuthenticatedReportReportIdRoute
   '/_authenticated/table/$tableName': typeof AuthenticatedTableTableNameRoute
@@ -127,6 +146,8 @@ export interface FileRouteTypes {
     | '/503'
     | '/agents'
     | '/datasources'
+    | '/knowledge-base'
+    | '/skills'
     | '/'
     | '/report/$reportId'
     | '/table/$tableName'
@@ -139,6 +160,8 @@ export interface FileRouteTypes {
     | '/503'
     | '/agents'
     | '/datasources'
+    | '/knowledge-base'
+    | '/skills'
     | '/'
     | '/report/$reportId'
     | '/table/$tableName'
@@ -152,6 +175,8 @@ export interface FileRouteTypes {
     | '/(errors)/503'
     | '/_authenticated/agents'
     | '/_authenticated/datasources'
+    | '/_authenticated/knowledge-base'
+    | '/_authenticated/skills'
     | '/_authenticated/'
     | '/_authenticated/report/$reportId'
     | '/_authenticated/table/$tableName'
@@ -180,6 +205,20 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/skills': {
+      id: '/_authenticated/skills'
+      path: '/skills'
+      fullPath: '/skills'
+      preLoaderRoute: typeof AuthenticatedSkillsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/knowledge-base': {
+      id: '/_authenticated/knowledge-base'
+      path: '/knowledge-base'
+      fullPath: '/knowledge-base'
+      preLoaderRoute: typeof AuthenticatedKnowledgeBaseRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/datasources': {
@@ -251,6 +290,8 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAgentsRoute: typeof AuthenticatedAgentsRoute
   AuthenticatedDatasourcesRoute: typeof AuthenticatedDatasourcesRoute
+  AuthenticatedKnowledgeBaseRoute: typeof AuthenticatedKnowledgeBaseRoute
+  AuthenticatedSkillsRoute: typeof AuthenticatedSkillsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedReportReportIdRoute: typeof AuthenticatedReportReportIdRoute
   AuthenticatedTableTableNameRoute: typeof AuthenticatedTableTableNameRoute
@@ -259,6 +300,8 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAgentsRoute: AuthenticatedAgentsRoute,
   AuthenticatedDatasourcesRoute: AuthenticatedDatasourcesRoute,
+  AuthenticatedKnowledgeBaseRoute: AuthenticatedKnowledgeBaseRoute,
+  AuthenticatedSkillsRoute: AuthenticatedSkillsRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedReportReportIdRoute: AuthenticatedReportReportIdRoute,
   AuthenticatedTableTableNameRoute: AuthenticatedTableTableNameRoute,

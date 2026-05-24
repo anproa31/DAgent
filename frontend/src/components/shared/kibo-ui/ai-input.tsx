@@ -4,6 +4,7 @@ import type {
   ComponentProps,
   HTMLAttributes,
   KeyboardEventHandler,
+  ReactNode,
 } from 'react';
 import { Children, useCallback, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
@@ -398,6 +399,87 @@ export function AIInputMultiSelectTable({
                   selected.includes(o.value)
                     ? "opacity-100"
                     : "opacity-0"
+                )}
+              />
+              {o.label}
+            </CommandItem>
+          ))}
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/**
+ * Generic multi-select used by the chat composer for the `@` knowledge-base picker and the
+ * `/` skill picker. Supports controlled open state so a keystroke (`@` / `/`) in the textarea
+ * can pop it open.
+ */
+export type AIInputMultiSelectProps = {
+  options: Option[];
+  selected: string[];
+  onSelectedChange: (v: string[]) => void;
+  disabled?: boolean;
+  icon?: ReactNode;
+  noun?: string;
+  searchPlaceholder?: string;
+  open?: boolean;
+  onOpenChange?: (o: boolean) => void;
+};
+export function AIInputMultiSelect({
+  options,
+  selected,
+  onSelectedChange,
+  disabled,
+  icon,
+  noun = "item",
+  searchPlaceholder = "Search…",
+  open,
+  onOpenChange,
+}: AIInputMultiSelectProps) {
+  const toggle = (v: string) =>
+    selected.includes(v)
+      ? onSelectedChange(selected.filter((s) => s !== v))
+      : onSelectedChange([...selected, v]);
+
+  const label =
+    selected.length === 0
+      ? `Add ${noun}`
+      : `${selected.length} ${noun}${selected.length > 1 ? "s" : ""}`;
+
+  return (
+    <Popover open={open} onOpenChange={onOpenChange}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={disabled}
+          className="gap-1 text-muted-foreground"
+        >
+          {icon}
+          {label}
+          <ChevronDown />
+        </Button>
+      </PopoverTrigger>
+
+      <PopoverContent className="w-72 p-0">
+        <Command>
+          <CommandInput placeholder={searchPlaceholder} />
+          {options.length === 0 && (
+            <div className="px-3 py-3 text-xs text-muted-foreground">
+              Nothing here yet.
+            </div>
+          )}
+          {options.map((o) => (
+            <CommandItem
+              key={o.value}
+              onSelect={() => toggle(o.value)}
+              className="flex gap-2"
+            >
+              <Check
+                className={cn(
+                  "h-4 w-4 shrink-0 transition",
+                  selected.includes(o.value) ? "opacity-100" : "opacity-0"
                 )}
               />
               {o.label}

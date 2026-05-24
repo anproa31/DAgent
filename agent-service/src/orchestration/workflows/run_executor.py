@@ -140,6 +140,42 @@ async def emit_title_updated_if_needed(run: RunState, initial_input: dict) -> No
         print(f"[runs] title update failed for session {run.session_id}: {te}")
 
 
+async def _consolidate_memory(run: RunState, initial_input: dict, final_state) -> None:
+    """Populate working memory from the finished run, then consolidate → episodic + semantic.
+
+    Best-effort: any failure (memory backend down, no LLM) is logged and swallowed so it can
+    never affect the user-facing run result.
+    """
+    try:
+        from memory.manager import get_memory_manager
+
+        mgr = get_memory_manager(
+            run.session_id,
+            embedding_base_url=initial_input.get("embedding_base_url", "") or "",
+            embedding_model=initial_input.get("embedding_model", "") or "",
+        )
+        wm = mgr.working
+        wm.add_message("user", run.query)
+
+        schema_info = ""
+        if final_state and final_state.values:
+            schema_info = (final_state.values.get("schema_info") or "").strip()
+        if schema_info:
+            wm.set_dataset_schema(schema_info[:4000])
+
+        for ex in run.executions:
+            wm.append_tool_output(
+                {"kind": ex.get("kind"), "status": ex.get("status"), "log": (ex.get("log") or "")[:500]}
+            )
+        if run.insights:
+            wm.add_message("assistant", run.insights[:4000])
+
+        result = await mgr.end_session()
+        print(f"[memory] consolidated run {run.run_id}: {result}")
+    except Exception as e:  # pragma: no cover - consolidation is best-effort
+        print(f"[memory] consolidation skipped for run {run.run_id}: {e}")
+
+
 async def persist_run_to_db(run: RunState) -> None:
     pending_approval = False
     try:
@@ -401,6 +437,9 @@ async def run_graph(run: RunState, initial_input: dict) -> None:
         await emit_title_updated_if_needed(run, initial_input)
         await run.event_queue.put(make_done_event(run))
 
+        # Distil this session into long-term memory (episodic + semantic). Best-effort.
+        await _consolidate_memory(run, initial_input, final_state)
+
     except Exception as e:
         run.error = str(e)
         run.done = True
@@ -432,6 +471,10 @@ def build_initial_state(
     model: str,
     base_url: str,
     api_key: str,
+    kb_documents: list | None = None,
+    skill_ids: list | None = None,
+    embedding_base_url: str = "",
+    embedding_model: str = "",
 ) -> dict:
     """Construct the LangGraph initial state dict for a new run."""
     return {
@@ -442,6 +485,10 @@ def build_initial_state(
         "model": model,
         "base_url": base_url,
         "api_key": api_key,
+        "kb_documents": kb_documents or [],
+        "skill_ids": skill_ids or [],
+        "embedding_base_url": embedding_base_url,
+        "embedding_model": embedding_model,
         "schema_info": "",
         "enhanced_context": "",
         "datasources": [],

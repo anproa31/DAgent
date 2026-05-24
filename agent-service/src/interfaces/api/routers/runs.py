@@ -50,6 +50,10 @@ async def start_run(session_id: str, body: StartRunRequest):
         model=body.model,
         base_url=body.base_url,
         api_key=body.api_key,
+        kb_documents=body.kb_documents,
+        skill_ids=body.skill_ids,
+        embedding_base_url=body.embedding_base_url,
+        embedding_model=body.embedding_model,
     )
 
     asyncio.create_task(run_graph(run, initial_input))

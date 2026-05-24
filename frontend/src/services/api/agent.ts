@@ -41,6 +41,10 @@ export interface StartRunRequest {
   model?: string
   base_url?: string
   api_key?: string
+  kb_documents?: string[]
+  skill_ids?: string[]
+  embedding_base_url?: string
+  embedding_model?: string
 }
 
 export interface StartRunResponse {
