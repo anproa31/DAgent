@@ -7,14 +7,28 @@ import { Label } from '@/components/ui/label'
 import { Settings as SettingsIcon } from 'lucide-react'
 
 export function Setting() {
-  const { baseUrl, apiKey, setBaseUrl, setApiKey, resetSettings } = useSettings()
+  const {
+    baseUrl,
+    apiKey,
+    embeddingBaseUrl,
+    embeddingModel,
+    setBaseUrl,
+    setApiKey,
+    setEmbeddingBaseUrl,
+    setEmbeddingModel,
+    resetSettings,
+  } = useSettings()
   const [open, setOpen] = useState(false)
   const [tempBaseUrl, setTempBaseUrl] = useState(baseUrl)
   const [tempApiKey, setTempApiKey] = useState(apiKey)
+  const [tempEmbedUrl, setTempEmbedUrl] = useState(embeddingBaseUrl)
+  const [tempEmbedModel, setTempEmbedModel] = useState(embeddingModel)
 
   const onSave = () => {
     setBaseUrl(tempBaseUrl.trim())
     setApiKey(tempApiKey.trim())
+    setEmbeddingBaseUrl(tempEmbedUrl.trim())
+    setEmbeddingModel(tempEmbedModel.trim())
     setOpen(false)
   }
 
@@ -22,6 +36,8 @@ export function Setting() {
     resetSettings()
     setTempBaseUrl('http://localhost:11434')
     setTempApiKey('')
+    setTempEmbedUrl('http://localhost:11434/v1')
+    setTempEmbedModel('nomic-embed-text')
   }
 
   return (
@@ -54,6 +70,28 @@ export function Setting() {
               value={tempApiKey}
               onChange={(e) => setTempApiKey(e.target.value)}
             />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="embed_url">Embedding Base URL</Label>
+            <Input
+              id="embed_url"
+              placeholder="http://localhost:11434/v1"
+              value={tempEmbedUrl}
+              onChange={(e) => setTempEmbedUrl(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="embed_model">Embedding Model</Label>
+            <Input
+              id="embed_model"
+              placeholder="nomic-embed-text"
+              value={tempEmbedModel}
+              onChange={(e) => setTempEmbedModel(e.target.value)}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Used for knowledge-base ingestion + retrieval. Changing the model after documents
+              are uploaded invalidates existing vectors — re-upload to re-index.
+            </p>
           </div>
           <div className="flex justify-between gap-2 pt-2">
             <Button variant="secondary" type="button" onClick={onReset}>Reset</Button>

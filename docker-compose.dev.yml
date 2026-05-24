@@ -9,6 +9,24 @@ services:
     networks:
       - app_network
 
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: daa_dev_qdrant
+    ports:
+      - "6333:6333"
+    networks:
+      - app_network
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  redis:
+    image: redis:alpine
+    container_name: daa_dev_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - app_network
+
   sandbox:
     build: ./sandbox
     container_name: daa_dev_sandbox
@@ -61,12 +79,21 @@ services:
       DATABASE_URL: sqlite+aiosqlite:////usr/src/app/data/agent.db
       # Set SQL_ECHO=1 to log SQL while debugging
       SQL_ECHO: "0"
+      # Memory system (memory.md)
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      # Embedding endpoint default; the user overrides it from the Settings UI per request.
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://host.docker.internal:11434/v1}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
+      MEMORY_USER_ID: ${MEMORY_USER_ID:-default}
     networks:
       - app_network
     depends_on:
       - app
       - sandbox
       - context-engine
+      - qdrant
+      - redis
     volumes:
       - ./agent-service:/usr/src/app
       # Persist SQLite outside the image; visible at ./agent-service/data on the host for testing
@@ -101,3 +128,5 @@ volumes:
     name: node_modules
   datasource_data:
     name: dev_datasource_data
+  qdrant_data:
+    name: dev_qdrant_data

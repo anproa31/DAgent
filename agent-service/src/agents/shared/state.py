@@ -30,6 +30,12 @@ class AgentState(TypedDict, total=False):
     base_url: str
     api_key: str
 
+    # Memory selection (composer @ / pickers) + embedding override (Settings UI)
+    kb_documents: List[str]   # KB document names to scope semantic recall to (@)
+    skill_ids: List[str]      # procedural skill ids to force-include (/)
+    embedding_base_url: str   # per-request embedding endpoint override
+    embedding_model: str
+
     # Schema context
     schema_info: str
     enhanced_context: str  # query-focused semantic context from context-engine /enhance (or fallback)

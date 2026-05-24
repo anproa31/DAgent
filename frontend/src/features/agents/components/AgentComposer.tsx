@@ -1,4 +1,5 @@
-import type { FormEventHandler } from 'react'
+import { useState, type FormEventHandler } from 'react'
+import { AtSign, Slash } from 'lucide-react'
 import {
   AIInput,
   AIInputModelSelect,
@@ -6,6 +7,7 @@ import {
   AIInputModelSelectItem,
   AIInputModelSelectTrigger,
   AIInputModelSelectValue,
+  AIInputMultiSelect,
   AIInputSubmit,
   AIInputTextarea,
   AIInputToolbar,
@@ -13,6 +15,11 @@ import {
   AIInputMultiSelectTable,
 } from '@/components/shared/kibo-ui/ai-input'
 import type { ModelInfo } from '@/hooks/use-analysis'
+
+export interface SelectOption {
+  value: string
+  label: string
+}
 
 export interface AgentComposerProps {
   query: string
@@ -23,6 +30,13 @@ export interface AgentComposerProps {
   tableOptions: { value: string; label: string }[]
   selectedTables: string[]
   onSelectedTablesChange: (tables: string[]) => void
+  // Memory pickers (@ knowledge base, / skills)
+  kbOptions: SelectOption[]
+  selectedKb: string[]
+  onSelectedKbChange: (v: string[]) => void
+  skillOptions: SelectOption[]
+  selectedSkills: string[]
+  onSelectedSkillsChange: (v: string[]) => void
   isRunning: boolean
   canSubmit: boolean
   onSubmit: FormEventHandler<HTMLFormElement>
@@ -38,20 +52,37 @@ export function AgentComposer({
   tableOptions,
   selectedTables,
   onSelectedTablesChange,
+  kbOptions,
+  selectedKb,
+  onSelectedKbChange,
+  skillOptions,
+  selectedSkills,
+  onSelectedSkillsChange,
   isRunning,
   canSubmit,
   onSubmit,
   onStop,
 }: AgentComposerProps) {
+  const [kbOpen, setKbOpen] = useState(false)
+  const [skillsOpen, setSkillsOpen] = useState(false)
+
+  // Typing `@` opens the knowledge-base picker, `/` opens the skill picker.
+  const handleQueryChange = (next: string) => {
+    const added = next.length === query.length + 1 ? next[next.length - 1] : ''
+    if (added === '@') setKbOpen(true)
+    else if (added === '/') setSkillsOpen(true)
+    onQueryChange(next)
+  }
+
   return (
     <AIInput
       onSubmit={onSubmit}
       className='shadow-lg dark:shadow-accent-foreground/10 border border-border'
     >
       <AIInputTextarea
-        onChange={(e) => onQueryChange(e.target.value)}
+        onChange={(e) => handleQueryChange(e.target.value)}
         value={query}
-        placeholder='Describe your analysis task'
+        placeholder='Describe your analysis task — use @ for knowledge base, / for skills'
         disabled={isRunning}
       />
       <AIInputToolbar>
@@ -75,6 +106,26 @@ export function AgentComposer({
             selected={selectedTables}
             onSelectedChange={onSelectedTablesChange}
             placeholder='Select tables'
+          />
+          <AIInputMultiSelect
+            options={kbOptions}
+            selected={selectedKb}
+            onSelectedChange={onSelectedKbChange}
+            icon={<AtSign className='h-4 w-4' />}
+            noun='knowledge base'
+            searchPlaceholder='Search documents…'
+            open={kbOpen}
+            onOpenChange={setKbOpen}
+          />
+          <AIInputMultiSelect
+            options={skillOptions}
+            selected={selectedSkills}
+            onSelectedChange={onSelectedSkillsChange}
+            icon={<Slash className='h-4 w-4' />}
+            noun='skill'
+            searchPlaceholder='Search skills…'
+            open={skillsOpen}
+            onOpenChange={setSkillsOpen}
           />
         </AIInputTools>
         <AIInputSubmit

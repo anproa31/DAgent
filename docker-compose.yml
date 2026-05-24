@@ -7,6 +7,20 @@ services:
     networks:
       - app_network
 
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: daa_prod_qdrant
+    networks:
+      - app_network
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  redis:
+    image: redis:alpine
+    container_name: daa_prod_redis
+    networks:
+      - app_network
+
   sandbox:
     build: ./sandbox
     container_name: daa_prod_sandbox
@@ -55,6 +69,11 @@ services:
       CODE_RUNNER_URL: ${CODE_RUNNER_URL:-http://sandbox:8001/}
       APP_SERVICE_URL: ${APP_SERVICE_URL:-http://app:8000}
       CONTEXT_ENGINE_URL: ${CONTEXT_ENGINE_URL:-http://context-engine:8002/}
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://host.docker.internal:11434/v1}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
+      MEMORY_USER_ID: ${MEMORY_USER_ID:-default}
     volumes:
       - agent_service_data:/usr/src/app/data
     networks:
@@ -63,6 +82,8 @@ services:
       - app
       - sandbox
       - context-engine
+      - qdrant
+      - redis
 
   frontend:
     build:
@@ -90,3 +111,6 @@ volumes:
   # SQLite DB for agent chat session history.
   agent_service_data:
     name: prod_agent_data
+  # Qdrant vector store for the memory system (semantic / episodic / procedural).
+  qdrant_data:
+    name: prod_qdrant_data

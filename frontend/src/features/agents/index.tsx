@@ -3,6 +3,7 @@ import { getRouteApi, useNavigate } from '@tanstack/react-router'
 import { useSettings } from '@/context/settings-context'
 import { useTableList } from '@/hooks/use-table-list'
 import { useModelListByMode, type ModelInfo } from '@/hooks/use-analysis'
+import { useKbDocuments, useSkills } from '@/hooks/use-memory'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { SQLApprovalModal } from '@/components/agents/SQLApprovalModal'
@@ -30,9 +31,11 @@ import { useAgentStreamHandlers } from '@/features/agents/hooks/use-agent-stream
 const agentsRouteApi = getRouteApi('/_authenticated/agents')
 
 export default function AgentsPage() {
-  const { baseUrl, apiKey } = useSettings()
+  const { baseUrl, apiKey, embeddingBaseUrl, embeddingModel } = useSettings()
   const { data: tables } = useTableList()
   const { data: modelData } = useModelListByMode(false)
+  const { data: kbDocuments } = useKbDocuments()
+  const { data: skills } = useSkills()
   const { session: sessionFromUrl } = agentsRouteApi.useSearch()
   const navigate = useNavigate()
   const {
@@ -46,6 +49,8 @@ export default function AgentsPage() {
   const [query, setQuery] = useState('')
   const [model, setModel] = useState('')
   const [selectedTables, setSelectedTables] = useState<string[]>([])
+  const [selectedKb, setSelectedKb] = useState<string[]>([])
+  const [selectedSkills, setSelectedSkills] = useState<string[]>([])
   const [submitStatus, setSubmitStatus] = useState<'ready' | 'submitted' | 'streaming'>('ready')
   const [sidePanelContent, setSidePanelContent] = useState<SidePanelContent | null>(null)
 
@@ -221,6 +226,10 @@ export default function AgentsPage() {
           model,
           base_url: baseUrl,
           api_key: apiKey,
+          kb_documents: selectedKb,
+          skill_ids: selectedSkills,
+          embedding_base_url: embeddingBaseUrl,
+          embedding_model: embeddingModel,
         })
 
         if (startError || !run_id) {
@@ -273,9 +282,13 @@ export default function AgentsPage() {
       tables,
       sessionId,
       selectedTables,
+      selectedKb,
+      selectedSkills,
       model,
       baseUrl,
       apiKey,
+      embeddingBaseUrl,
+      embeddingModel,
       sessionFromUrl,
       addRun,
       navigate,
@@ -418,6 +431,8 @@ export default function AgentsPage() {
   const isRunning = submitStatus !== 'ready' || hasActiveRun
   const models = modelData?.models ?? []
   const tableOptions = (tables ?? []).map((t) => ({ value: t.name, label: t.name }))
+  const kbOptions = (kbDocuments ?? []).map((d) => ({ value: d, label: d }))
+  const skillOptions = (skills ?? []).map((s) => ({ value: s.skill_id, label: s.name }))
   const canSubmit = !!query.trim() && !!model
 
   const composer = (
@@ -430,6 +445,12 @@ export default function AgentsPage() {
       tableOptions={tableOptions}
       selectedTables={selectedTables}
       onSelectedTablesChange={setSelectedTables}
+      kbOptions={kbOptions}
+      selectedKb={selectedKb}
+      onSelectedKbChange={setSelectedKb}
+      skillOptions={skillOptions}
+      selectedSkills={selectedSkills}
+      onSelectedSkillsChange={setSelectedSkills}
       isRunning={isRunning}
       canSubmit={canSubmit}
       onSubmit={handleSubmit}

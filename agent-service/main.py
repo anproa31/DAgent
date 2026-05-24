@@ -11,7 +11,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from infrastructure.database.connection import init_db
-from interfaces.api.routers import runs_router, sessions_router, title_router
+from interfaces.api.routers import (
+    kb_router,
+    runs_router,
+    sessions_router,
+    skills_router,
+    title_router,
+)
 from utils.agent_logger import get_logger, setup_logging
 
 setup_logging()
@@ -39,6 +45,8 @@ app.add_middleware(
 app.include_router(sessions_router, prefix="/agent")
 app.include_router(runs_router, prefix="/agent")
 app.include_router(title_router, prefix="/agent")
+app.include_router(kb_router, prefix="/agent")
+app.include_router(skills_router, prefix="/agent")
 
 
 @app.get("/health")

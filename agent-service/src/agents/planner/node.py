@@ -7,6 +7,7 @@ import asyncio
 from agents.planner.analytics_react_agent import MAX_PLANNER_STEPS, get_analytics_react_agent
 from agents.planner.context_builder import build_planner_context
 from agents.planner.history import format_rl_suggestion
+from agents.planner.memory_context import build_memory_context
 from agents.planner.plan_tracker import sync_plan_with_completed, update_completed_actions
 from agents.reflection.memory import get_policy_suggestion
 from agents.shared.state import AgentState, PlannerStep
@@ -92,6 +93,11 @@ async def planner_node(state: AgentState) -> dict:
         execution_plan=execution_plan,
     )
 
+    # Long-term memory (KB chunks / skills / related past sessions). Best-effort: empty on
+    # any backend failure. Only surfaced on the first step to bound per-step latency.
+    memory_context = build_memory_context(state) if is_first_step else ""
+    memory_section = f"Long-term memory:\n{memory_context}\n\n" if memory_context else ""
+
     task_context = (
         f"User query: {state['query']}\n\n"
         f"Intent: {state.get('intent', 'unknown')}\n"
@@ -100,6 +106,7 @@ async def planner_node(state: AgentState) -> dict:
         f"Registered datasources:\n{datasources_summary}\n\n"
         f"Datasource schema:\n{schema_info}\n\n"
         f"Semantic context:\n{ctx}\n\n"
+        f"{memory_section}"
         f"Execution plan:\n{plan_context}\n\n"
         f"Remaining plan steps: {', '.join(remaining_steps) or '(none)'}\n\n"
         f"Completed actions: {', '.join(completed_actions) or '(none)'}\n\n"

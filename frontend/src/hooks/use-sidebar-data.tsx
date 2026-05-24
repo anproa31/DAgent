@@ -1,5 +1,5 @@
 import { useMemo, useCallback } from 'react'
-import { IconDatabase, IconClock, IconPin } from '@tabler/icons-react'
+import { IconDatabase, IconClock, IconPin, IconBook2, IconWand } from '@tabler/icons-react'
 import { deleteSession } from '@/api/agentApi'
 import { useTableList } from '@/hooks/use-table-list'
 import { type SidebarData } from '@/components/layout/types'
@@ -79,6 +79,16 @@ export const useSidebarData = (): {
               title: 'All Datasources',
               icon: IconDatabase,
               url: '/datasources',
+            },
+            {
+              title: 'Knowledge Base',
+              icon: IconBook2,
+              url: '/knowledge-base',
+            },
+            {
+              title: 'Skills',
+              icon: IconWand,
+              url: '/skills',
             },
             {
               title: 'Pinned',
