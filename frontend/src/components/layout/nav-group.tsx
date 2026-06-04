@@ -35,7 +35,7 @@ import {
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu'
 import { cn } from '@/lib/utils'
-import { NavGroup as NavGroupType, NavCollapsible } from './types'
+import { NavGroup as NavGroupType, NavCollapsible, NavLink } from './types'
 
 const NavBadge = ({ children }: { children: ReactNode }) => (
   <Badge className='rounded-full px-1 py-0 text-xs'>{children}</Badge>
@@ -303,8 +303,8 @@ export function NavGroup({
 }: NavGroupType) {
   const { state, isMobile } = useSidebar()
 
-  const datasourceItem = items.find(
-    (item) => item.title === 'All Datasources' && 'url' in item
+  const linkItems = items.filter(
+    (item): item is NavLink => 'url' in item && !!item.url
   )
   const pinnedItem = items.find(
     (item): item is NavCollapsible => item.title === 'Pinned' && 'items' in item
@@ -334,18 +334,18 @@ export function NavGroup({
     <SidebarGroup className='min-h-0 flex flex-col gap-0'>
       {title && !isCollapsed && <SidebarGroupLabel>{title}</SidebarGroupLabel>}
 
-      {datasourceItem && 'url' in datasourceItem && (
-        <SidebarMenu>
+      {linkItems.map((item) => (
+        <SidebarMenu key={item.title}>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild tooltip={datasourceItem.title}>
-              <Link to={datasourceItem.url}>
-                {datasourceItem.icon && <datasourceItem.icon />}
-                {!isCollapsed && <span>{datasourceItem.title}</span>}
+            <SidebarMenuButton asChild tooltip={item.title}>
+              <Link to={item.url}>
+                {item.icon && <item.icon />}
+                {!isCollapsed && <span>{item.title}</span>}
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
-      )}
+      ))}
 
       {pinnedItem && (
         <div className={cn(isCollapsed ? 'mt-2' : 'mt-5')}>
