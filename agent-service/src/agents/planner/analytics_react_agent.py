@@ -36,11 +36,17 @@ Available tools:
 Respond using this exact format:
 Thought: <why this tool is needed given observations>
 Action: <tool name>
-Action Input: <optional JSON or brief note>
+Action Input: <optional JSON with a scoped "task" field>
 
 Use Action: exec to obtain data — never assume SQL; the executor decides SQL vs Python.
 Use Action: generate_result when data and analysis already answer the query.
 Do NOT call eda/insight/viz for simple RETRIEVAL unless explicitly needed.
+
+Worker scope — each tool does ONE job; put a narrow task in Action Input JSON:
+- exec/sql/python: data fetch or computation ONLY (e.g. {"task": "fetch attrition counts by department"})
+- eda: statistical summary ONLY — no business advice
+- insight: business narrative ONLY — no SQL/code/charts
+- viz: charts ONLY — no insights text
 """
 
 THOUGHT_STEP_USER = """Task context:

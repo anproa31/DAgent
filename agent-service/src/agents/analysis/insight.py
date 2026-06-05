@@ -1,5 +1,6 @@
 from agents.shared.observations import create_observation
 from agents.shared.state import AgentState
+from agents.shared.worker_context import build_worker_user_message
 from orchestration.streaming import make_delta_emitter
 from utils.agent_logger import get_logger
 from utils.llm_client import get_async_client, chat_complete
@@ -26,7 +27,7 @@ async def insight_agent_node(state: AgentState) -> dict:
     )
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": state["query"]},
+        {"role": "user", "content": build_worker_user_message(state, "insight")},
     ]
 
     try:

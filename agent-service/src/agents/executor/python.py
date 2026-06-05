@@ -10,6 +10,7 @@ from agents.executor.python_risk import HIGH, MEDIUM, assess_python_risk
 from agents.shared.data_discovery import extract_data_discovery_error
 from agents.shared.observations import create_observation, observation_from_tool_result
 from agents.shared.state import AgentState
+from agents.shared.worker_context import build_worker_user_message, check_python_scope_violations
 from orchestration.streaming import make_delta_emitter
 from tools.executor import run_tool
 from utils.agent_logger import get_logger
@@ -45,7 +46,7 @@ async def python_agent_node(state: AgentState) -> dict:
 
     messages = [
         {"role": "system", "content": PYTHON_AGENT_SYSTEM.format(context=ctx, schema=schema)},
-        {"role": "user", "content": state["query"]},
+        {"role": "user", "content": build_worker_user_message(state, "python")},
     ]
 
     try:
@@ -75,6 +76,9 @@ async def python_agent_node(state: AgentState) -> dict:
 
     code_match = re.search(r"<python>(.*?)</python>", raw, re.DOTALL)
     python_code = code_match.group(1).strip() if code_match else raw.strip()
+    scope_violations = check_python_scope_violations(python_code)
+    if scope_violations:
+        logger.warning("python scope violations: %s", scope_violations)
     logger.info("generated Python (%d chars)", len(python_code))
 
     session_id = state.get("session_id", state.get("run_id", "default"))
@@ -164,6 +168,12 @@ async def python_agent_node(state: AgentState) -> dict:
     obs = observation_from_tool_result("python", "execute_python", exec_result)
     obs["artifacts"]["data_summary"] = data_summary
     obs["artifacts"]["result_var_names"] = ["df_result"]
+    if scope_violations:
+        obs["next_hint"] = (
+            "Python step included out-of-scope work ("
+            + ", ".join(scope_violations)
+            + ") — prefer dedicated insight/viz agents next."
+        )
 
     return {
         "current_agent": "python",

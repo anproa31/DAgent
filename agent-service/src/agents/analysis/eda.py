@@ -1,5 +1,6 @@
 from agents.shared.observations import create_observation
 from agents.shared.state import AgentState
+from agents.shared.worker_context import build_worker_user_message, sanitize_eda_output
 from orchestration.streaming import make_delta_emitter
 from utils.agent_logger import get_logger
 from utils.llm_client import get_async_client, chat_complete
@@ -26,11 +27,11 @@ async def eda_agent_node(state: AgentState) -> dict:
     )
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"Perform EDA for this query: {state['query']}"},
+        {"role": "user", "content": build_worker_user_message(state, "eda")},
     ]
 
     try:
-        eda_summary = await chat_complete(
+        raw_eda = await chat_complete(
             client,
             model,
             messages,
@@ -38,6 +39,7 @@ async def eda_agent_node(state: AgentState) -> dict:
             log_tag="eda_agent",
             on_delta=make_delta_emitter(state.get("run_id", ""), "eda"),
         )
+        eda_summary = sanitize_eda_output(raw_eda)
         logger.info("exit success (%d chars)", len(eda_summary))
         obs = create_observation(
             agent_name="eda",

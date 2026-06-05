@@ -8,6 +8,7 @@ from langgraph.types import interrupt
 
 from agents.shared.observations import create_observation
 from agents.shared.state import AgentState
+from agents.shared.worker_context import build_worker_user_message, sanitize_sql_explanation
 from orchestration.streaming import make_delta_emitter
 from utils.agent_logger import get_logger
 from utils.llm_client import chat_complete, get_async_client
@@ -55,7 +56,7 @@ async def sql_agent_node(state: AgentState) -> dict:
 
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": state["query"]},
+        {"role": "user", "content": build_worker_user_message(state, "sql")},
     ]
 
     if rejection_reason and user_edited_sql:
@@ -113,7 +114,7 @@ async def sql_agent_node(state: AgentState) -> dict:
     sql_draft = clean_sql_for_execution(extract_sql_from_llm_response(raw))
 
     if exp_match:
-        sql_explanation = exp_match.group(1).strip()
+        sql_explanation = sanitize_sql_explanation(exp_match.group(1).strip())
 
     logger.info("generated SQL:\n%s", sql_draft)
 

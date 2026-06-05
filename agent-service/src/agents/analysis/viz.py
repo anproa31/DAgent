@@ -2,6 +2,7 @@ import re
 
 from agents.shared.observations import create_observation, observation_from_tool_result
 from agents.shared.state import AgentState
+from agents.shared.worker_context import build_worker_user_message
 from tools.executor import run_tool
 from utils.agent_logger import get_logger
 from utils.llm_client import get_async_client, chat_complete
@@ -24,15 +25,15 @@ async def viz_agent_node(state: AgentState) -> dict:
         query=state.get("query", ""),
         insights=state.get("insights", ""),
     )
+    scoped_task = build_worker_user_message(state, "viz")
+    data_summary = state.get("data_summary", "")
+    user_content = scoped_task
+    if data_summary:
+        user_content = f"{scoped_task}\n\nAvailable data summary:\n{data_summary}"
+
     messages = [
         {"role": "system", "content": system_prompt},
-        {
-            "role": "user",
-            "content": (
-                f"Data summary: {state.get('data_summary', '')}\n\n"
-                f"Create visualizations for: {state['query']}"
-            ),
-        },
+        {"role": "user", "content": user_content},
     ]
 
     try:
