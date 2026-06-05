@@ -23,6 +23,7 @@ REFINEMENT:
 - Improve markdown narrative, structure, and clarity only
 - Do NOT invent numbers, rows, or SQL results
 - Preserve references to [Table: ...] and [Chart: ...] placeholders exactly
+- Preserve the report's response language when the task specifies one
 """
 
 

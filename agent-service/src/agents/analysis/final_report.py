@@ -3,7 +3,7 @@ from infrastructure.sandbox.code_runner import get_variable_results
 from orchestration.streaming import make_delta_emitter
 from utils.agent_logger import get_logger
 from utils.llm_client import get_async_client, chat_complete
-from utils.prompts import RETRIEVAL_RESPONSE_SYSTEM, FINAL_REPORT_SYSTEM
+from utils.prompts import RETRIEVAL_RESPONSE_SYSTEM, FINAL_REPORT_SYSTEM, format_language_rule
 
 logger = get_logger("final_report")
 
@@ -48,6 +48,7 @@ async def _synthesize_framing(state: AgentState, session_id: str) -> tuple[str, 
         data_summary=state.get("data_summary", "") or "No data summary available",
         eda_summary=state.get("eda_summary", "") or "No EDA performed",
         insights=state.get("insights", "") or "No insights generated",
+        language_rule=format_language_rule(state.get("language", "en")),
     )
     try:
         text = await chat_complete(
@@ -153,6 +154,7 @@ async def _build_retrieval_report(state: AgentState, session_id: str) -> list:
         prompt = RETRIEVAL_RESPONSE_SYSTEM.format(
             query=state.get("query", ""),
             data_summary=data_summary,
+            language_rule=format_language_rule(state.get("language", "en")),
         )
         try:
             response_text = await chat_complete(

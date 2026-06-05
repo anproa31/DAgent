@@ -15,7 +15,7 @@ from agents.shared.state import AgentState
 from config.settings import MAX_REFLECTION_PASSES, MAX_REFLECTION_RERUNS
 from orchestration.routing.plan import update_plan_from_reflection
 from utils.agent_logger import get_logger
-from utils.prompts import format_semantic_context_for_prompt
+from utils.prompts import format_semantic_context_for_prompt, format_language_rule
 
 logger = get_logger("reflection")
 
@@ -152,7 +152,8 @@ def _build_reflection_task(state: AgentState) -> str:
     data_context = build_data_context_from_history(state.get("planner_history", []))
     return (
         f"User query: {state.get('query', '')}\n"
-        f"Intent: {state.get('intent', 'ANALYTICAL')}\n\n"
+        f"Intent: {state.get('intent', 'ANALYTICAL')}\n"
+        f"{format_language_rule(state.get('language', 'en'))}\n\n"
         f"Datasource context:\n{ctx}\n\n"
         f"Execution data context:\n{data_context}"
     )

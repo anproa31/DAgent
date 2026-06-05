@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from typing import List
 
 from agents.reflection.memory import get_policy_suggestion
+from agents.shared.language import detect_response_language
 from agents.shared.state import AgentState
 from context.context_engine import get_enhanced_context
 from context.schema_service import (
@@ -127,8 +129,21 @@ async def orchestrator_node(state: AgentState) -> dict:
     """Analyse the query, fetch schema + datasources, and choose the pipeline."""
     logger.info("enter query=%r", state["query"][:80])
 
+    query = state.get("query", "")
+    client = get_async_client(state.get("base_url", ""), state.get("api_key", ""))
+    model = state.get("model", "")
+
     tables_arg = state.get("tables")
+    language_task = asyncio.create_task(
+        detect_response_language(
+            query,
+            base_url=state.get("base_url", ""),
+            api_key=state.get("api_key", ""),
+            model=model,
+        )
+    )
     schema_payload = await fetch_schema_payload(tables_arg)
+    language = await language_task
 
     schema_info = (state.get("schema_info") or "").strip()
     if not schema_info:
@@ -157,7 +172,6 @@ async def orchestrator_node(state: AgentState) -> dict:
     intent = "RETRIEVAL"
     pipeline = ["sql"]
     execution_mode = "sql"
-    query = state.get("query", "")
 
     if detect_explore_intent(query) and quick_intent not in ("ANALYTICAL",):
         logger.info("explore intent detected — upgrading to ANALYTICAL pipeline")
@@ -170,9 +184,6 @@ async def orchestrator_node(state: AgentState) -> dict:
         pipeline = suggested_pipeline
         execution_mode = "python" if "python" in pipeline else "sql"
         intent = quick_intent or rl_suggestion.get("intent", intent)
-
-    client = get_async_client(state.get("base_url", ""), state.get("api_key", ""))
-    model = state.get("model", "")
 
     if quick_intent == "RETRIEVAL":
         logger.info("quick-classified as RETRIEVAL, skipping LLM router")
@@ -242,15 +253,17 @@ async def orchestrator_node(state: AgentState) -> dict:
     execution_plan = build_execution_plan(pipeline, intent, execution_mode)
 
     logger.info(
-        "exit intent=%s mode=%s orchestration=%s pipeline=%s plan_steps=%d",
+        "exit intent=%s mode=%s orchestration=%s pipeline=%s plan_steps=%d language=%s",
         intent,
         execution_mode,
         orchestration_mode,
         pipeline,
         len(execution_plan),
+        language,
     )
 
     return {
+        "language": language,
         "schema_info": schema_info,
         "enhanced_context": enhanced_context,
         "datasources": datasources,

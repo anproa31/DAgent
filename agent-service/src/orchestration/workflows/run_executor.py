@@ -481,6 +481,7 @@ def build_initial_state(
         "session_id": session_id,
         "run_id": run_id,
         "query": query,
+        "language": "",
         "tables": tables,
         "model": model,
         "base_url": base_url,

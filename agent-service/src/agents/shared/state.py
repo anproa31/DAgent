@@ -25,6 +25,7 @@ class AgentState(TypedDict, total=False):
 
     # User inputs
     query: str
+    language: str  # ISO 639-1 code for user-facing responses (e.g. vi, en)
     tables: List[str]
     model: str
     base_url: str

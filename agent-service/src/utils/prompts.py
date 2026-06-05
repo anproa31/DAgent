@@ -8,6 +8,13 @@ heterogeneous sources without any data copying.
 """
 
 
+def format_language_rule(language: str) -> str:
+    """Build the mandatory response-language instruction for user-facing agents."""
+    from agents.shared.language import language_response_rule
+
+    return language_response_rule(language)
+
+
 def format_semantic_context_for_prompt(enhanced_context: str) -> str:
     """Normalize ``state['enhanced_context']`` for ``{context}`` in agent prompts."""
     text = (enhanced_context or "").strip()
@@ -80,6 +87,8 @@ Rules:
 - DO NOT generate an Executive Summary, Key Findings, Business Implications, or Recommendations.
 - DO NOT add any analytical commentary or insights.
 
+{language_rule}
+
 User's question: {query}
 Data retrieved (for your reference only — do NOT reproduce this):
 {data_summary}
@@ -113,6 +122,8 @@ Rules:
 Respond with ONLY this format (no markdown code fences — raw SQL only):
 SQL: <your DuckDB SQL query here>
 EXPLANATION: <one sentence explaining what this query does>
+
+{language_rule}
 """
 
 PYTHON_AGENT_SYSTEM = """You are a Python data analysis expert. Generate Python code that answers the user's question using pandas / numpy / scipy / statsmodels as appropriate.
@@ -155,6 +166,8 @@ Provide a concise EDA narrative covering:
 4. Correlations or relationships between columns
 
 Be factual and specific. Use numbers from the data summary.
+
+{language_rule}
 """
 
 INSIGHT_AGENT_SYSTEM = """You are a business intelligence expert. Generate actionable insights from data analysis.
@@ -182,6 +195,8 @@ Format each insight as:
 **[Impact Level: High]** Insight text here.
 **[Impact Level: Medium]** Insight text here.
 **[Impact Level: Low]** Insight text here.
+
+{language_rule}
 """
 
 VIZ_AGENT_SYSTEM = """You are a data visualization expert. Generate Python matplotlib code to visualize key findings.
@@ -248,6 +263,8 @@ TITLE: <one concise, descriptive title — plain text, no markdown, no quotes>
 <2-4 short paragraphs: (1) summary of the study and the data analysed plus any needed context; (2) the "big questions" this analysis answers and a one-sentence preview of each conclusion; (3) a single sentence outlining the rest of the report.>
 ---CONCLUSION---
 <1-3 short paragraphs: reprise each big question with its answer, add any recommendations the insights support, then note limitations or sensible next questions/future work.>
+
+{language_rule}
 """
 
 REPORT_TEMPLATE = """# Analysis Report

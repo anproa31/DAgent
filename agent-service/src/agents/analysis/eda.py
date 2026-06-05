@@ -3,7 +3,7 @@ from agents.shared.state import AgentState
 from orchestration.streaming import make_delta_emitter
 from utils.agent_logger import get_logger
 from utils.llm_client import get_async_client, chat_complete
-from utils.prompts import EDA_AGENT_SYSTEM, format_semantic_context_for_prompt
+from utils.prompts import EDA_AGENT_SYSTEM, format_semantic_context_for_prompt, format_language_rule
 
 logger = get_logger("eda_agent")
 
@@ -22,6 +22,7 @@ async def eda_agent_node(state: AgentState) -> dict:
         context=ctx,
         schema=schema,
         data_summary=data_summary,
+        language_rule=format_language_rule(state.get("language", "en")),
     )
     messages = [
         {"role": "system", "content": system_prompt},

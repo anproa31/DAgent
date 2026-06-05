@@ -11,7 +11,7 @@ from agents.shared.state import AgentState
 from orchestration.streaming import make_delta_emitter
 from utils.agent_logger import get_logger
 from utils.llm_client import chat_complete, get_async_client
-from utils.prompts import SQL_AGENT_SYSTEM, format_semantic_context_for_prompt
+from utils.prompts import SQL_AGENT_SYSTEM, format_semantic_context_for_prompt, format_language_rule
 from utils.sql_sanitize import clean_sql_for_execution, extract_sql_from_llm_response
 
 logger = get_logger("sql_agent")
@@ -44,7 +44,11 @@ async def sql_agent_node(state: AgentState) -> dict:
     schema = state.get("schema_info", "No schema available")
     ctx = format_semantic_context_for_prompt(state.get("enhanced_context", ""))
 
-    system_prompt = SQL_AGENT_SYSTEM.format(context=ctx, schema=schema)
+    system_prompt = SQL_AGENT_SYSTEM.format(
+        context=ctx,
+        schema=schema,
+        language_rule=format_language_rule(state.get("language", "en")),
+    )
 
     user_edited_sql = state.get("sql_draft", "")
     rejection_reason = state.get("sql_rejection_reason", "")
