@@ -27,13 +27,13 @@ target_metadata = Base.metadata
 
 
 def get_url() -> str:
-    url = os.getenv("DATABASE_URL_SYNC") or os.getenv("DATABASE_URL")
-    if url:
-        if url.startswith("sqlite+aiosqlite:///"):
-            return "sqlite:///" + url.replace("sqlite+aiosqlite:///", "", 1)
-        return url
-    default_path = _ROOT / "data" / "agent.db"
-    return f"sqlite:///{default_path}"
+    # psycopg3 (postgresql+psycopg://) works for both the async app engine and
+    # Alembic's sync engine, so the URL is used as-is — no dialect rewrite.
+    return (
+        os.getenv("DATABASE_URL_SYNC")
+        or os.getenv("DATABASE_URL")
+        or "postgresql+psycopg://daa:daa@postgres:5432/daa_agent"
+    )
 
 
 def run_migrations_offline() -> None:

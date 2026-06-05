@@ -46,6 +46,7 @@ export default function AgentsPage() {
     replaceAgentHistorySession,
     updateHistoryTitle,
     refreshAgentSessionsFromServer,
+    removeFromHistory,
   } = useSharedAnalysisHistory()
 
   const [query, setQuery] = useState('')
@@ -204,22 +205,40 @@ export default function AgentsPage() {
       setSubmitStatus('submitted')
 
       try {
+        // Session identity is driven by the URL, not the in-memory store: a prompt sent from
+        // the landing / new-chat view (no ?session=) always starts a fresh session, while a
+        // prompt sent inside an open session continues it as a follow-up. The edit-fork path
+        // (replaceHistorySessionId) always forks a new session.
+        const viewingSessionId = opts?.replaceHistorySessionId
+          ? ''
+          : sessionFromUrl ?? ''
+
         let currentSessionId: string
         let createdNewSession = false
 
-        if (opts?.replaceHistorySessionId) {
+        if (viewingSessionId) {
+          currentSessionId = viewingSessionId
+        } else {
           const sessionRes = await createSession()
           currentSessionId = sessionRes.session_id
           setSessionId(currentSessionId)
           createdNewSession = true
-        } else {
-          currentSessionId = sessionId ?? ''
-          if (!currentSessionId) {
-            const sessionRes = await createSession()
-            currentSessionId = sessionRes.session_id
-            setSessionId(currentSessionId)
-            createdNewSession = true
+        }
+
+        // Surface the new conversation in the sidebar at submit time (before the run starts),
+        // so it no longer appears only after the final answer.
+        if (createdNewSession) {
+          setSidePanelContent(null)
+          if (opts?.replaceHistorySessionId) {
+            replaceAgentHistorySession(
+              opts.replaceHistorySessionId,
+              currentSessionId,
+              trimmed
+            )
+          } else {
+            addToHistory(currentSessionId, trimmed, 'agent')
           }
+          scheduleSessionTitleUpdate(currentSessionId, trimmed)
         }
 
         const { run_id, error: startError } = await startRun(currentSessionId, {
@@ -236,26 +255,13 @@ export default function AgentsPage() {
 
         if (startError || !run_id) {
           toast.error(startError || t('agents.failedStartRun'))
+          if (createdNewSession) removeFromHistory(currentSessionId)
           setSubmitStatus('ready')
           return
         }
 
         setSessionTables(currentSessionId, selectedTables)
         addRun(run_id, currentSessionId, trimmed)
-
-        if (createdNewSession) {
-          setSidePanelContent(null)
-          if (opts?.replaceHistorySessionId) {
-            replaceAgentHistorySession(
-              opts.replaceHistorySessionId,
-              currentSessionId,
-              trimmed
-            )
-          } else {
-            addToHistory(currentSessionId, trimmed, 'agent')
-          }
-          scheduleSessionTitleUpdate(currentSessionId, trimmed)
-        }
 
         if (!sessionFromUrl || sessionFromUrl !== currentSessionId) {
           navigate({ to: '/agents', search: { session: currentSessionId } })
@@ -282,7 +288,6 @@ export default function AgentsPage() {
     },
     [
       tables,
-      sessionId,
       selectedTables,
       selectedKb,
       selectedSkills,
@@ -296,6 +301,7 @@ export default function AgentsPage() {
       navigate,
       addToHistory,
       replaceAgentHistorySession,
+      removeFromHistory,
       updateHistoryTitle,
       refreshAgentSessionsFromServer,
       scheduleSessionTitleUpdate,

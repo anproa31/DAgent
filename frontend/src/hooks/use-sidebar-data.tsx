@@ -18,7 +18,14 @@ export const useSidebarData = (): {
   error: Error | null
 } => {
   const { data: tables, isLoading: tablesLoading, error: tablesError } = useTableList()
-  const { history, pinnedIds, isPinned, togglePin, removeFromHistory } = useSharedAnalysisHistory()
+  const {
+    history,
+    pinnedIds,
+    isPinned,
+    togglePin,
+    removeFromHistory,
+    refreshAgentSessionsFromServer,
+  } = useSharedAnalysisHistory()
   const navigate = useNavigate()
   const location = useLocation()
   const { locale } = useLocale()
@@ -27,26 +34,37 @@ export const useSidebarData = (): {
   const handleDelete = useCallback(
     (deletedId: string) => {
       const item = history.find((h) => h.id === deletedId)
-      void (async () => {
-        if (item?.kind === 'agent') {
-          try {
-            await deleteSession(deletedId)
-          } catch {
-            toast.error(t('toast.couldNotDeleteConversation'))
-            return
-          }
+      const isAgent = item?.kind === 'agent'
+
+      // Optimistic: drop from the sidebar and leave the open session immediately so the
+      // UI updates in real time, regardless of backend latency.
+      removeFromHistory(deletedId)
+      toast.success(t('toast.conversationDeleted'))
+      if (location.pathname === '/agents') {
+        const params = new URLSearchParams(location.search)
+        if (params.get('session') === deletedId) {
+          navigate({ to: '/agents', search: {} })
         }
-        removeFromHistory(deletedId)
-        toast.success(t('toast.conversationDeleted'))
-        if (location.pathname === '/agents') {
-          const params = new URLSearchParams(location.search)
-          if (params.get('session') === deletedId) {
-            navigate({ to: '/agents', search: {} })
-          }
-        }
-      })()
+      }
+
+      if (!isAgent) return
+
+      // Persist the soft-delete in the background; on failure resync from the server
+      // (the row still exists there) so the conversation reappears.
+      void deleteSession(deletedId).catch(() => {
+        toast.error(t('toast.couldNotDeleteConversation'))
+        void refreshAgentSessionsFromServer()
+      })
     },
-    [removeFromHistory, navigate, location.pathname, location.search, history, t]
+    [
+      removeFromHistory,
+      refreshAgentSessionsFromServer,
+      navigate,
+      location.pathname,
+      location.search,
+      history,
+      t,
+    ]
   )
 
   const sidebarData = useMemo((): SidebarData | null => {

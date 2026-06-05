@@ -10,7 +10,7 @@ langchain-openai>=1.0.1
 agent-patterns==0.2.4
 python-dotenv>=1.2.1
 sqlalchemy[asyncio]==2.0.40
-aiosqlite==0.21.0
+psycopg[binary]>=3.2
 alembic==1.15.2
 # --- Memory system (memory.md) ---
 qdrant-client>=1.12

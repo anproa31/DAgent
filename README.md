@@ -47,7 +47,7 @@ All API services use **FastAPI** + **Uvicorn**. Python **3.11** (`app`, `agent-s
 | Service | Key libraries & tools |
 |---------|----------------------|
 | **app** | Pydantic, DuckDB, Pandas, OpenAI SDK (model listing) |
-| **agent-service** | LangGraph, LangChain, SQLAlchemy + Alembic + aiosqlite (session DB), Mem0, Qdrant client, Redis |
+| **agent-service** | LangGraph, LangChain, SQLAlchemy + Alembic + psycopg3 (Postgres session DB), Mem0, Qdrant client, Redis |
 | **sandbox** | DuckDB, Pandas/NumPy, Matplotlib, Seaborn, SciPy, statsmodels, scikit-learn, sympy |
 | **context-engine** | Pydantic, httpx (schema context for the agent) |
 
@@ -139,7 +139,7 @@ ollama pull qwen3:8b
 
 3. Pull the embedding model used by the memory system:
 ```bash
-ollama pull nomic-embed-text
+ollama pull nomic-embed-text-v2-moe
 ```
 
 After the models are downloaded, reload the browser and select the chat model

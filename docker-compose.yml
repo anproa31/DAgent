@@ -21,6 +21,23 @@ services:
     networks:
       - app_network
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: daa_prod_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-daa}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-daa}
+      POSTGRES_DB: ${POSTGRES_DB:-daa_agent}
+    volumes:
+      - agent_pg_data:/var/lib/postgresql/data
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-daa} -d ${POSTGRES_DB:-daa_agent}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   sandbox:
     build: ./sandbox
     container_name: daa_prod_sandbox
@@ -74,16 +91,23 @@ services:
       EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://host.docker.internal:11434/v1}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
       MEMORY_USER_ID: ${MEMORY_USER_ID:-default}
-    volumes:
-      - agent_service_data:/usr/src/app/data
+      # Chat/run persistence in Postgres (schema auto-created on boot; alembic for versioned migrations)
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://daa:daa@postgres:5432/daa_agent}
     networks:
       - app_network
     depends_on:
-      - app
-      - sandbox
-      - context-engine
-      - qdrant
-      - redis
+      postgres:
+        condition: service_healthy
+      app:
+        condition: service_started
+      sandbox:
+        condition: service_started
+      context-engine:
+        condition: service_started
+      qdrant:
+        condition: service_started
+      redis:
+        condition: service_started
 
   frontend:
     build:
@@ -108,9 +132,9 @@ volumes:
   # Shared volume used by both ``app`` (registry + uploads) and ``sandbox`` (DuckDB).
   datasource_data:
     name: prod_datasource_data
-  # SQLite DB for agent chat session history.
-  agent_service_data:
-    name: prod_agent_data
+  # Postgres data for agent chat/run session history.
+  agent_pg_data:
+    name: prod_agent_pg_data
   # Qdrant vector store for the memory system (semantic / episodic / procedural).
   qdrant_data:
     name: prod_qdrant_data

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 revision = "002_streaming_artifacts"
@@ -18,8 +19,8 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("agent_runs", sa.Column("thinking_segments", sa.JSON(), nullable=True))
-    op.add_column("agent_runs", sa.Column("executions", sa.JSON(), nullable=True))
+    op.add_column("agent_runs", sa.Column("thinking_segments", postgresql.JSONB(), nullable=True))
+    op.add_column("agent_runs", sa.Column("executions", postgresql.JSONB(), nullable=True))
 
 
 def downgrade() -> None:
