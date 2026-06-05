@@ -19,7 +19,10 @@ export function SidebarHeaderBar() {
         <img
           src={logo}
           alt='data-analysis-agent logo'
-          className={cn('shrink-0', isCollapsed ? 'h-6 w-6' : 'h-8 w-auto')}
+          className={cn(
+            'shrink-0 dark:invert',
+            isCollapsed ? 'h-6 w-6' : 'h-8 w-auto'
+          )}
         />
         <SidebarTrigger variant='outline' className='shrink-0' />
       </div>

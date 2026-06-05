@@ -46,7 +46,7 @@ export function ThinkingCollapsible({
           src={logo}
           alt=''
           aria-hidden
-          className='h-4 w-4 shrink-0 animate-spin'
+          className='h-4 w-4 shrink-0 animate-spin dark:invert'
         />
         <span>
           Thinking
