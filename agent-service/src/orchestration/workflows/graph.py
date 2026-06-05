@@ -26,7 +26,11 @@ logger = get_logger("graph")
 
 
 def build_graph():
-    """Build and compile the multi-agent analytics LangGraph with ReAct planner hub."""
+    """Build the orchestrator-worker LangGraph (diagram #1) with agent loop (diagram #2).
+
+    User → Orchestrator (reason/plan) → Planner hub (perceive/brain/route)
+         → Specialized agents (scope/knowledge/tools: act/observe) → Report → Reflection
+    """
     builder = StateGraph(AgentState)
 
     builder.add_node("orchestrator", orchestrator_node)

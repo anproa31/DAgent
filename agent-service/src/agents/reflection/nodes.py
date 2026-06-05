@@ -8,6 +8,7 @@ import re
 from typing import Any, List
 
 from agents.reflection.analytics_reflection_agent import get_analytics_reflection_agent
+from orchestration.orchestrator.core import Orchestrator
 from agents.reflection.helpers import build_data_context_from_history, flatten_report_content
 from agents.reflection.memory import record_trajectory
 from agents.reflection.pattern import should_run_reflection
@@ -39,10 +40,13 @@ async def reflection_node(state: AgentState) -> dict:
     report_text = flatten_report_content(report_content)
     prior_cycles = state.get("reflection_cycle", 0)
 
+    reflection_patch = Orchestrator.reflection_entry(state)
+
     # Hard limit: never refine more than MAX_REFLECTION_PASSES times per run.
     if prior_cycles >= MAX_REFLECTION_PASSES:
         logger.info("reflection hard limit reached (%d) — stopping", prior_cycles)
         return {
+            **reflection_patch,
             "current_agent": "reflection",
             "reflection": "Reflection passes exhausted; accepting current report.",
             "reflection_needs_rerun": False,

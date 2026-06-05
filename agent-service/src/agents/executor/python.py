@@ -7,12 +7,12 @@ import re
 from langgraph.types import interrupt
 
 from agents.executor.python_risk import HIGH, MEDIUM, assess_python_risk
+from agents.shared.act import invoke_tool, observe_from_tool
 from agents.shared.data_discovery import extract_data_discovery_error
-from agents.shared.observations import create_observation, observation_from_tool_result
+from agents.shared.observations import create_observation
 from agents.shared.state import AgentState
 from agents.shared.worker_context import build_worker_user_message, check_python_scope_violations
 from orchestration.streaming import make_delta_emitter
-from tools.executor import run_tool
 from utils.agent_logger import get_logger
 from utils.llm_client import chat_complete, get_async_client
 from utils.prompts import PYTHON_AGENT_SYSTEM, format_semantic_context_for_prompt
@@ -141,15 +141,27 @@ async def python_agent_node(state: AgentState) -> dict:
             }
         python_code = edited_code
 
-    exec_result = await run_tool(session_id, "execute_python", code=python_code)
+    exec_result = await invoke_tool(
+        state,
+        "execute_python",
+        agent_role="python",
+        code=python_code,
+    )
     if not exec_result.success:
         err = exec_result.error or "Python execution failed"
         logger.error("sandbox execution failed: %s", err)
         data_discovery_error = extract_data_discovery_error(err)
 
-        obs = observation_from_tool_result("python", "execute_python", exec_result)
-        obs["artifacts"]["data_summary"] = ""
-        obs["artifacts"]["data_discovery_error"] = data_discovery_error
+        observe_patch = observe_from_tool(
+            state,
+            agent_role="python",
+            tool_name="execute_python",
+            result=exec_result,
+            extra_artifacts={
+                "data_summary": "",
+                "data_discovery_error": data_discovery_error,
+            },
+        )
 
         return {
             "current_agent": "python",
@@ -158,22 +170,38 @@ async def python_agent_node(state: AgentState) -> dict:
             "data_summary": f"Execution error: {err}",
             "result_var_names": [],
             "agent_steps": state.get("agent_steps", []) + ["python"],
-            "last_observation": obs,
+            **observe_patch,
         }
 
-    var_result = await run_tool(session_id, "get_variable", name="df_result")
+    var_result = await invoke_tool(
+        state,
+        "get_variable",
+        agent_role="python",
+        name="df_result",
+    )
     data_summary = var_result.data.get("data_summary", "No data returned")
     logger.info("exit success summary=%r", data_summary.split("\n")[0] if data_summary else "")
 
-    obs = observation_from_tool_result("python", "execute_python", exec_result)
-    obs["artifacts"]["data_summary"] = data_summary
-    obs["artifacts"]["result_var_names"] = ["df_result"]
+    next_hint = None
     if scope_violations:
-        obs["next_hint"] = (
+        next_hint = (
             "Python step included out-of-scope work ("
             + ", ".join(scope_violations)
             + ") — prefer dedicated insight/viz agents next."
         )
+
+    observe_patch = observe_from_tool(
+        state,
+        agent_role="python",
+        tool_name="execute_python",
+        result=exec_result,
+        next_hint=next_hint,
+        extra_artifacts={
+            "data_summary": data_summary,
+            "result_var_names": ["df_result"],
+        },
+        budget_units=2,
+    )
 
     return {
         "current_agent": "python",
@@ -182,5 +210,5 @@ async def python_agent_node(state: AgentState) -> dict:
         "result_var_names": ["df_result"],
         "error": "",
         "agent_steps": state.get("agent_steps", []) + ["python"],
-        "last_observation": obs,
+        **observe_patch,
     }

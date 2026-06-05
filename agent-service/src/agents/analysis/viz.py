@@ -1,9 +1,9 @@
 import re
 
-from agents.shared.observations import create_observation, observation_from_tool_result
+from agents.shared.act import invoke_tool, observe_from_tool
+from agents.shared.observations import create_observation
 from agents.shared.state import AgentState
 from agents.shared.worker_context import build_worker_user_message
-from tools.executor import run_tool
 from utils.agent_logger import get_logger
 from utils.llm_client import get_async_client, chat_complete
 from utils.prompts import VIZ_AGENT_SYSTEM, format_semantic_context_for_prompt
@@ -83,30 +83,43 @@ async def viz_agent_node(state: AgentState) -> dict:
             "last_observation": obs,
         }
 
-    exec_result = await run_tool(session_id, "execute_python", code=viz_code)
+    exec_result = await invoke_tool(
+        state,
+        "execute_python",
+        agent_role="viz",
+        code=viz_code,
+    )
     if not exec_result.success:
         err = exec_result.error or "Viz execution failed"
         logger.error("visualization code error: %s", err)
-        obs = observation_from_tool_result("viz", "execute_python", exec_result)
-        obs["artifacts"]["viz_code"] = viz_code
-        obs["artifacts"]["viz_var_names"] = []
+        observe_patch = observe_from_tool(
+            state,
+            agent_role="viz",
+            tool_name="execute_python",
+            result=exec_result,
+            extra_artifacts={"viz_code": viz_code, "viz_var_names": []},
+        )
         return {
             "current_agent": "viz",
             "viz_code": viz_code,
             "viz_var_names": [],
             "agent_steps": state.get("agent_steps", []) + ["viz"],
-            "last_observation": obs,
+            **observe_patch,
         }
 
-    obs = observation_from_tool_result("viz", "execute_python", exec_result)
-    obs["summary"] = f"Generated {len(var_names)} chart(s)"
-    obs["artifacts"]["viz_code"] = viz_code
-    obs["artifacts"]["viz_var_names"] = var_names
+    observe_patch = observe_from_tool(
+        state,
+        agent_role="viz",
+        tool_name="execute_python",
+        result=exec_result,
+        summary=f"Generated {len(var_names)} chart(s)",
+        extra_artifacts={"viz_code": viz_code, "viz_var_names": var_names},
+    )
 
     return {
         "current_agent": "viz",
         "viz_code": viz_code,
         "viz_var_names": var_names,
         "agent_steps": state.get("agent_steps", []) + ["viz"],
-        "last_observation": obs,
+        **observe_patch,
     }

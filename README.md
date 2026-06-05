@@ -53,10 +53,12 @@ All API services use **FastAPI** + **Uvicorn**. Python **3.11** (`app`, `agent-s
 
 ### Agent & memory
 
-- **Orchestration**: LangGraph multi-agent workflow (ReAct planner, SQL/Python executor, reflection, HITL)
+- **Orchestration**: LangGraph orchestrator-worker pattern — user talks only to the **Orchestrator** (reason → plan → route → reflect); specialized agents handle scoped work
+- **Agent loop**: perceive → brain (plan) → act → observe, with guardrails (validate → scope → budget) on every action
+- **Specialized agents**: each worker defines **scope & instructions**, **knowledge** sources, and **tools** (`agents/shared/specialized_agent.py`)
 - **LLM**: OpenAI-compatible API (Ollama default; any compatible provider)
 - **Embeddings**: OpenAI-compatible endpoint (e.g. `nomic-embed-text` via Ollama)
-- **Memory**: 4-layer system — Qdrant (semantic/episodic vectors), Redis (working memory), Mem0, procedural defaults in SQLite
+- **Memory**: 4-layer system — Qdrant (semantic/episodic vectors), Redis (working memory), Mem0, procedural defaults in SQLite; top-k retrieval on every planner step
 
 ### Data & infrastructure
 

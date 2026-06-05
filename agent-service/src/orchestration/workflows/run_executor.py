@@ -10,7 +10,8 @@ from typing import Any, AsyncGenerator, List, Optional
 from langgraph.types import Command
 
 from agents.planner.analytics_react_agent import MAX_PLANNER_STEPS
-from config.settings import HITL_TIMEOUT_SECONDS
+from agents.shared.agent_anatomy import init_run_budget
+from config.settings import HITL_TIMEOUT_SECONDS, MAX_RUN_BUDGET_UNITS
 from infrastructure.database.connection import async_session_maker
 from infrastructure.repositories import run_repository, session_repository
 from interfaces.api.session_title import update_session_title_if_empty
@@ -75,6 +76,7 @@ def make_done_event(run: RunState) -> dict:
             "completion_reason": run.completion_reason,
             "steps_used": run.steps_used,
             "steps_budget": MAX_PLANNER_STEPS,
+            "run_budget_limit": MAX_RUN_BUDGET_UNITS,
             "content": run.report_content,
             "insights": run.insights,
         }
@@ -515,6 +517,8 @@ def build_initial_state(
         "rerun_count": 0,
         "python_risk": "",
         "completion_reason": "",
+        "loop_phase": "perceive",
+        "run_budget": init_run_budget(),
         "sql_draft": "",
         "sql_explanation": "",
         "sql_approved": False,

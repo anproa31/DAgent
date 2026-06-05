@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from langgraph.types import interrupt
 
-from agents.shared.observations import create_observation, observation_from_tool_result
+from agents.shared.act import invoke_tool, observe_from_tool
+from agents.shared.observations import create_observation
 from agents.shared.state import AgentState
 from agents.shared.web_discover_policy import needs_web_discover
 from context.context_engine import get_enhanced_context
@@ -13,7 +14,6 @@ from context.schema_service import (
     fetch_schema_payload,
     get_datasources,
 )
-from tools.executor import run_tool
 from utils.agent_logger import get_logger
 
 logger = get_logger("web_discover_agent")
@@ -62,9 +62,10 @@ async def web_discover_agent_node(state: AgentState) -> dict:
 
     logger.info("enter query=%r url=%s reason=%s", query[:100], direct_url or "(search)", gate_reason)
 
-    proposal = await run_tool(
-        session_id,
+    proposal = await invoke_tool(
+        state,
         "propose_web_data",
+        agent_role="web_discover",
         query=query or direct_url,
         url=direct_url,
         model=state.get("model"),
@@ -73,11 +74,16 @@ async def web_discover_agent_node(state: AgentState) -> dict:
     )
 
     if not proposal.success:
-        obs = observation_from_tool_result("web_discover", "propose_web_data", proposal)
+        observe_patch = observe_from_tool(
+            state,
+            agent_role="web_discover",
+            tool_name="propose_web_data",
+            result=proposal,
+        )
         return {
             "current_agent": "web_discover",
             "agent_steps": state.get("agent_steps", []) + ["web_discover"],
-            "last_observation": obs,
+            **observe_patch,
             "error": proposal.error,
         }
 
@@ -142,32 +148,45 @@ async def web_discover_agent_node(state: AgentState) -> dict:
             "last_observation": obs,
         }
 
-    register_result = await run_tool(
-        session_id,
+    register_result = await invoke_tool(
+        state,
         "register_web_data",
+        agent_role="web_discover",
         urls=approved_urls,
         name=approved_name,
         query=query,
     )
 
     if not register_result.success:
-        obs = observation_from_tool_result("web_discover", "register_web_data", register_result)
+        observe_patch = observe_from_tool(
+            state,
+            agent_role="web_discover",
+            tool_name="register_web_data",
+            result=register_result,
+        )
         return {
             "current_agent": "web_discover",
             "web_discover_approved": True,
             "agent_steps": state.get("agent_steps", []) + ["web_discover"],
-            "last_observation": obs,
             "error": register_result.error,
+            **observe_patch,
         }
 
     schema_patch = await _refresh_schema_state(state)
     view_names = register_result.data.get("view_names") or []
 
-    obs = observation_from_tool_result("web_discover", "register_web_data", register_result)
-    obs["summary"] = register_result.data.get("summary", obs["summary"])
-    obs["artifacts"]["view_names"] = view_names
-    obs["artifacts"]["web_discover_approved"] = True
-    obs["artifacts"]["gate_reason"] = gate_reason
+    observe_patch = observe_from_tool(
+        state,
+        agent_role="web_discover",
+        tool_name="register_web_data",
+        result=register_result,
+        summary=register_result.data.get("summary"),
+        extra_artifacts={
+            "view_names": view_names,
+            "web_discover_approved": True,
+            "gate_reason": gate_reason,
+        },
+    )
 
     logger.info("exit registered views=%s", view_names)
 
@@ -176,6 +195,6 @@ async def web_discover_agent_node(state: AgentState) -> dict:
         "web_discover_approved": True,
         "web_discover_rejection_reason": "",
         "agent_steps": state.get("agent_steps", []) + ["web_discover"],
-        "last_observation": obs,
+        **observe_patch,
         **schema_patch,
     }

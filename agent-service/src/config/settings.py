@@ -45,6 +45,9 @@ def _float_env(name: str, default: float) -> float:
 
 # --- Agent loop / reliability tuning (solution.md P0 + P1) ---
 
+# ReAct planner step limit (agent loop stop condition).
+MAX_PLANNER_STEPS = _int_env("MAX_PLANNER_STEPS", 15)
+
 # ReAct loop: force the planner to wrap up once it has spent this many steps
 # without reaching generate_result (solution.md §1 Fix 4).
 FORCED_EXIT_THRESHOLD = _int_env("FORCED_EXIT_THRESHOLD", 10)
@@ -70,6 +73,11 @@ HITL_TIMEOUT_SECONDS = _int_env("HITL_TIMEOUT_SECONDS", 1800)
 # Planner context window budget (solution.md §8): how many recent observations
 # the planner reads in full-summary form before older ones are compressed.
 PLANNER_RECENT_OBSERVATIONS = _int_env("PLANNER_RECENT_OBSERVATIONS", 3)
+
+# Run action budget (agent anatomy diagram): planner steps + tool calls share one pool.
+MAX_RUN_BUDGET_UNITS = _int_env("MAX_RUN_BUDGET_UNITS", 40)
+BUDGET_COST_PER_PLANNER_STEP = _int_env("BUDGET_COST_PER_PLANNER_STEP", 1)
+BUDGET_COST_PER_TOOL = _int_env("BUDGET_COST_PER_TOOL", 1)
 
 # --- Memory system numeric tuning (memory.md) ---
 EMBEDDING_DIMS = _int_env("EMBEDDING_DIMS", 768)

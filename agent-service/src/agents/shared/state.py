@@ -108,7 +108,11 @@ class AgentState(TypedDict, total=False):
     # Python HITL risk tier (solution.md §5)
     python_risk: str  # safe | medium | high
 
+    # Agent loop (anatomy diagram)
+    loop_phase: str  # perceive | brain | act | observe
+    run_budget: Dict[str, Any]  # {used, limit, exhausted}
+
     # Control
     done: bool
     error: str
-    completion_reason: str  # success | step_limit | hitl_timeout | user_cancelled
+    completion_reason: str  # success | step_limit | budget | hitl_timeout | user_cancelled

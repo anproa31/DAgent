@@ -1,16 +1,33 @@
-"""Dispatch tool calls by name."""
+"""Tool pipeline: guardrail gate → dispatch → exec → result."""
 from __future__ import annotations
 
-from typing import Any, List
+from typing import Any, List, Optional
 
+from agents.shared.guardrails import gate_tool_call
 from tools.registry import get_tool
 from tools.schemas import ToolResult
 
 
-async def run_tool(session_id: str, tool_name: str, **kwargs: Any) -> ToolResult:
+async def run_tool(
+    session_id: str,
+    tool_name: str,
+    *,
+    agent_role: str = "",
+    state: Optional[dict] = None,
+    **kwargs: Any,
+) -> ToolResult:
     # ``tool_name`` (not ``name``) so a tool whose own parameter is called
     # ``name`` (e.g. get_variable, register_web_data) can be passed via kwargs
     # without colliding with this positional argument.
+    if state is not None:
+        gate = gate_tool_call(state, tool_name, agent_role=agent_role)
+        if not gate.allowed:
+            return ToolResult(
+                success=False,
+                error=gate.reason,
+                chunks=[{"output_type": "text", "content": gate.reason}],
+            )
+
     tool = get_tool(tool_name)
     if tool is None:
         return ToolResult(

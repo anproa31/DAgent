@@ -13,10 +13,8 @@ from agents.planner.plan_tracker import resolve_planner_action
 from agents.shared.llm_endpoint import normalize_base_url
 from agents.shared.state import AgentState, PlannerStep
 from agents.shared.web_discover_policy import should_use_discover_action
-from config.settings import FORCED_EXIT_THRESHOLD
+from config.settings import FORCED_EXIT_THRESHOLD, MAX_PLANNER_STEPS
 from orchestration.streaming import ThinkingTokenCallback
-
-MAX_PLANNER_STEPS = 15
 
 # Stateless — resolves the active run from a contextvar per token, so a single
 # shared instance is safe across concurrent runs and the cached planner LLM.

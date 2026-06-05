@@ -1,4 +1,4 @@
-"""Initial query analysis: schema context, intent, and pipeline selection."""
+"""Orchestrator entry: reasoning + planning (user talks only to the orchestrator)."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import re
 from typing import List
 
 from agents.reflection.memory import get_policy_suggestion
+from agents.shared.agent_anatomy import LoopPhase
 from agents.shared.language import detect_response_language
 from agents.shared.state import AgentState
 from context.context_engine import get_enhanced_context
@@ -126,8 +127,8 @@ async def _validate_pipeline_with_react(
 
 
 async def orchestrator_node(state: AgentState) -> dict:
-    """Analyse the query, fetch schema + datasources, and choose the pipeline."""
-    logger.info("enter query=%r", state["query"][:80])
+    """Reasoning + planning: intent, schema context, execution plan."""
+    logger.info("enter query=%r phase=reason+plan", state["query"][:80])
 
     query = state.get("query", "")
     client = get_async_client(state.get("base_url", ""), state.get("api_key", ""))
@@ -272,6 +273,7 @@ async def orchestrator_node(state: AgentState) -> dict:
         "orchestration_mode": orchestration_mode,
         "pipeline": pipeline,
         "execution_plan": execution_plan,
+        "loop_phase": LoopPhase.PERCEIVE.value,
         "current_agent": "orchestrator",
         "agent_steps": state.get("agent_steps", []) + ["orchestrator"],
     }
