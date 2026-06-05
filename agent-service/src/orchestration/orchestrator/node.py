@@ -135,16 +135,10 @@ async def orchestrator_node(state: AgentState) -> dict:
     model = state.get("model", "")
 
     tables_arg = state.get("tables")
-    language_task = asyncio.create_task(
-        detect_response_language(
-            query,
-            base_url=state.get("base_url", ""),
-            api_key=state.get("api_key", ""),
-            model=model,
-        )
+    schema_payload, language = await asyncio.gather(
+        fetch_schema_payload(tables_arg),
+        asyncio.to_thread(detect_response_language, query),
     )
-    schema_payload = await fetch_schema_payload(tables_arg)
-    language = await language_task
 
     schema_info = (state.get("schema_info") or "").strip()
     if not schema_info:

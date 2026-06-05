@@ -8,7 +8,9 @@ from typing import Any, Dict, List, Optional
 from agents.shared.state import AgentState, ExecutionPlanStep
 
 # ---------------------------------------------------------------------------
-# Role boundaries — each worker sees only what it needs to do its one job.
+# Role boundaries — canonical scope data. Consumed by the specialized-agent
+# registry (specialized_agent._SCOPE); each worker's SYSTEM prompt carries the
+# LLM-facing copy, so build_worker_user_message does NOT repeat it per call.
 # ---------------------------------------------------------------------------
 
 _ROLE_ALIASES = {
@@ -73,6 +75,14 @@ _INSIGHT_MARKERS = re.compile(
 
 _CHART_IN_PYTHON = re.compile(r"\b(plt\.|matplotlib|seaborn|\.plot\(|\.bar\(|\.hist\()", re.I)
 
+# Recommendation-style lines to strip from EDA output. Deliberately narrow:
+# factual stat language ("the distribution suggests skew", "outliers should be
+# checked") must survive, so "suggest"/"should" are NOT matched here.
+_ADVICE_LINE = re.compile(
+    r"\b(recommend(?:ation)?s?|actionable|action items?|next steps?)\b",
+    re.I,
+)
+
 
 def get_planner_action_input(state: AgentState) -> Dict[str, Any]:
     """Latest planner ``action_input`` for the step being dispatched."""
@@ -88,15 +98,43 @@ def _resolve_role(role: str) -> str:
 
 
 def _plan_step_for_action(state: AgentState, action: str) -> Optional[ExecutionPlanStep]:
-    """First pending or running execution-plan step matching ``action``."""
+    """First execution-plan step whose ``action`` matches (any status)."""
     for step in state.get("execution_plan") or []:
         if step.get("action") == action:
             return step
     return None
 
 
+# Roles that emit SQL against the DuckDB views and therefore need the exact,
+# copy-pasteable view names (prevents catalog-qualified hallucinations like
+# ``'<id>'.main.<table>``).
+_DATA_ROLES = {"sql", "python", "viz"}
+
+
+def _available_view_names(state: AgentState) -> List[str]:
+    """Exact DuckDB view names the worker may query, in registration order."""
+    names: List[str] = []
+    for ds in state.get("datasources") or []:
+        for view in ds.get("view_names") or []:
+            if view and view not in names:
+                names.append(view)
+    if names:
+        return names
+    # Fallback: parse "## Table: <name>" headers from the schema markdown.
+    for match in re.findall(r"^##\s*Table:\s*(.+?)\s*$", state.get("schema_info") or "", re.M):
+        cleaned = match.strip().strip('"')
+        if cleaned and cleaned not in names:
+            names.append(cleaned)
+    return names
+
+
 def build_worker_user_message(state: AgentState, role: str) -> str:
-    """Narrow user message — workers must not treat the full query as their deliverable."""
+    """Narrow user message: the worker's assigned step + the query as context only.
+
+    Role boundaries (deliverable, out-of-scope) are enforced by the worker's
+    system prompt, so they are not repeated here — this keeps the per-call
+    message small while the system prompt stays static and cacheable.
+    """
     role = _resolve_role(role)
     scope = _SCOPE.get(role)
     if not scope:
@@ -111,19 +149,27 @@ def build_worker_user_message(state: AgentState, role: str) -> str:
         or ""
     ).strip()
 
+    # Prefer the description of the plan step actually being dispatched
+    # (``current_action`` covers the exec→sql/python router); fall back to role.
     current_action = state.get("current_action") or role
-    plan_action = "exec" if role == "sql" and current_action == "exec" else role
-    plan_step = _plan_step_for_action(state, plan_action) or _plan_step_for_action(state, role)
-    step_desc = (plan_step or {}).get("description", scope["step_title"])
+    plan_step = _plan_step_for_action(state, current_action) or _plan_step_for_action(state, role)
+    step_desc = (plan_step or {}).get("description") or scope["step_title"]
 
     lines = [
-        f"## Assigned step: {scope['step_title']}",
-        f"Step description: {step_desc}",
+        f"## Your assigned step: {scope['step_title']}",
+        step_desc,
+    ]
+    if role in _DATA_ROLES:
+        views = _available_view_names(state)
+        if views:
+            quoted = ", ".join(f'"{v}"' for v in views)
+            lines += [
+                "",
+                f'Available tables — query these EXACT view names only, with no catalog/schema prefix: {quoted}',
+            ]
+    lines += [
         "",
-        f"Deliverable: {scope['deliverable']}",
-        f"OUT OF SCOPE: {scope['forbidden']}",
-        "",
-        "Original user question (context only — other agents answer it; you must NOT):",
+        "Original user question (context only — do NOT answer it yourself; later steps do):",
         user_query,
     ]
     if planner_note:
@@ -158,12 +204,6 @@ def check_python_scope_violations(code: str) -> List[str]:
     if re.search(r"print\s*\(\s*['\"].{80,}", code):
         violations.append("long narrative print (insights belong in insight agent)")
     return violations
-
-
-_ADVICE_LINE = re.compile(
-    r"\b(recommend(?:ation)?s?|should|suggest(?:ion)?s?|actionable|next steps?)\b",
-    re.I,
-)
 
 
 def sanitize_eda_output(text: str) -> str:

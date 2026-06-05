@@ -15,7 +15,7 @@ from agents.shared.worker_context import build_worker_user_message, check_python
 from orchestration.streaming import make_delta_emitter
 from utils.agent_logger import get_logger
 from utils.llm_client import chat_complete, get_async_client
-from utils.prompts import PYTHON_AGENT_SYSTEM, format_semantic_context_for_prompt
+from utils.prompts import PYTHON_AGENT_SYSTEM, format_semantic_context_for_prompt, format_language_rule
 
 logger = get_logger("python_agent")
 
@@ -45,7 +45,14 @@ async def python_agent_node(state: AgentState) -> dict:
     ctx = format_semantic_context_for_prompt(state.get("enhanced_context", ""))
 
     messages = [
-        {"role": "system", "content": PYTHON_AGENT_SYSTEM.format(context=ctx, schema=schema)},
+        {
+            "role": "system",
+            "content": PYTHON_AGENT_SYSTEM.format(
+                context=ctx,
+                schema=schema,
+                language_rule=format_language_rule(state.get("language", "en")),
+            ),
+        },
         {"role": "user", "content": build_worker_user_message(state, "python")},
     ]
 

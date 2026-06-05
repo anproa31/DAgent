@@ -35,10 +35,19 @@ def _base_state(**overrides):
 
 def test_build_worker_user_message_scopes_sql_task():
     msg = build_worker_user_message(_base_state(), "sql")
-    assert "Assigned step" in msg
-    assert "OUT OF SCOPE" in msg
-    assert "fetch employee attrition flags" in msg
-    assert "you must NOT" in msg.lower() or "do not" in msg.lower()
+    assert "assigned step" in msg.lower()
+    assert "Fetch data via SQL" in msg
+    assert "fetch employee attrition flags" in msg  # planner-scoped task
+    assert "context only" in msg.lower()
+    assert "do not" in msg.lower()
+
+
+def test_build_worker_user_message_lists_available_views():
+    state = _base_state(datasources=[{"view_names": ["t_26b20137_data", "sales_2024"]}])
+    msg = build_worker_user_message(state, "python")
+    assert '"t_26b20137_data"' in msg
+    assert '"sales_2024"' in msg
+    assert "no catalog/schema prefix" in msg.lower()
 
 
 def test_sanitize_sql_explanation_strips_insights():

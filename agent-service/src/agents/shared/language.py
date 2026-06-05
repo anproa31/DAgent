@@ -1,79 +1,71 @@
-"""Detect the response language the user expects (ISO 639-1)."""
+"""Detect the response language the user expects (ISO 639-1), fully offline.
+
+Uses ``lingua`` (statistical n-gram detector) instead of an LLM call: no extra
+round-trip, no network, no provider/structured-output dependency, and far more
+reliable on the short text typical of analytics queries.
+"""
 
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 
-from langchain_openai import ChatOpenAI
-from pydantic import BaseModel, Field
+from lingua import LanguageDetectorBuilder
 
-from agents.shared.llm_endpoint import normalize_base_url
 from utils.agent_logger import get_logger
 
 logger = get_logger("language")
 
 DEFAULT_LANGUAGE = "en"
 
-_LANGUAGE_DETECTION_SYSTEM = (
-    "You are a fast language classifier. Analyze the user's message and determine "
-    "the primary language they want the assistant's answer written in — even when "
-    "they mix languages. Return only the ISO 639-1 code (e.g. vi, en, fr, ja, zh)."
-)
+# Below this many alphabetic characters the text is too short to classify
+# reliably (e.g. "ok", "top 10") — fall back to the default instead of guessing.
+_MIN_ALPHA_CHARS = 3
 
 
-class LanguageDetection(BaseModel):
-    language: str = Field(description="ISO 639-1 language code (e.g. 'vi', 'en')")
+@lru_cache(maxsize=1)
+def _detector():
+    """Build the detector once. ``low_accuracy_mode`` bounds memory while still
+    beating langid/langdetect on short text. Loaded lazily on first detection."""
+    return LanguageDetectorBuilder.from_all_languages().with_low_accuracy_mode().build()
 
 
 def normalize_language_code(code: str | None) -> str:
-    """Normalize to a lowercase ISO 639-1 code, falling back to English."""
+    """Normalize to a lowercase 2-letter ISO 639-1 code, defaulting to English."""
     if not code:
         return DEFAULT_LANGUAGE
-    cleaned = re.sub(r"[^a-zA-Z]", "", code.strip().lower())
-    if len(cleaned) >= 2:
-        return cleaned[:2]
-    return DEFAULT_LANGUAGE
+    cleaned = re.sub(r"[^a-z]", "", code.strip().lower())
+    return cleaned[:2] if len(cleaned) >= 2 else DEFAULT_LANGUAGE
 
 
 def language_response_rule(language: str) -> str:
     """Prompt fragment forcing user-facing prose into the detected language."""
     lang = normalize_language_code(language)
     return (
-        f"RESPONSE LANGUAGE (mandatory): Write ALL user-facing prose in the language "
+        "RESPONSE LANGUAGE (mandatory): Write ALL user-facing prose in the language "
         f"with ISO 639-1 code '{lang}'. SQL, Python, and code identifiers stay in English. "
-        f"Keep technical terms untranslated when no accurate equivalent exists."
+        "Keep technical terms untranslated when no accurate equivalent exists."
     )
 
 
-async def detect_response_language(
-    query: str,
-    *,
-    base_url: str,
-    api_key: str,
-    model: str,
-) -> str:
-    """Detect the language the user expects for the assistant's reply."""
+def detect_response_language(query: str) -> str:
+    """Detect the language the user expects for the assistant's reply.
+
+    Synchronous and CPU-bound (a few ms once warm); call it via
+    ``asyncio.to_thread`` from async code so the first, model-loading call does
+    not block the event loop.
+    """
     text = (query or "").strip()
-    if not text:
+    if sum(c.isalpha() for c in text) < _MIN_ALPHA_CHARS:
         return DEFAULT_LANGUAGE
 
     try:
-        llm = ChatOpenAI(
-            model=model,
-            temperature=0,
-            base_url=normalize_base_url(base_url),
-            api_key=api_key or "none",
-        )
-        structured_llm = llm.with_structured_output(LanguageDetection)
-        result = await structured_llm.ainvoke(
-            [
-                ("system", _LANGUAGE_DETECTION_SYSTEM),
-                ("user", text),
-            ]
-        )
-        language = normalize_language_code(getattr(result, "language", None))
-        logger.info("detected response language=%s query=%r", language, text[:80])
-        return language
+        language = _detector().detect_language_of(text)
+        if language is None:
+            return DEFAULT_LANGUAGE
+        code = normalize_language_code(language.iso_code_639_1.name)
+        logger.info("detected response language=%s query=%r", code, text[:80])
+        return code
     except Exception as exc:
         logger.warning("language detection failed, defaulting to %s: %s", DEFAULT_LANGUAGE, exc)
         return DEFAULT_LANGUAGE

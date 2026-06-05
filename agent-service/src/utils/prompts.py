@@ -113,6 +113,7 @@ How to read the schema:
 Rules:
 - Use DuckDB SQL syntax (PostgreSQL-flavoured, with extensions like ``USING SAMPLE``, ``QUALIFY``, ``LIST`` aggregates).
 - Reference views EXACTLY by the name shown after ``## Table:`` in the schema, quoted in double quotes, e.g. ``SELECT "col" FROM "view_name"``.
+- Every datasource is a plain view in the default schema. NEVER prefix a table with a catalog/schema and NEVER wrap the table name in single quotes — write ``FROM "view_name"``, never ``FROM 'view_name'.main.table`` or ``FROM catalog.main.table``.
 - NEVER use ``SELECT *`` — list only the columns relevant to the data-fetch step.
 - For lookup queries (e.g. "show me 5 employees") select only key identifying columns.
 - Handle NULLs appropriately and add ``LIMIT`` when the user asks for a specific row count.
@@ -146,6 +147,7 @@ Datasource schema:
 
 Rules:
 - Use ``duckdb_conn`` for data access; do NOT reassign ``duckdb_conn``.
+- Reference each datasource as a plain double-quoted view in the default schema, e.g. ``duckdb_conn.execute('SELECT ... FROM "view_name"')``. NEVER qualify with a catalog/schema (no ``catalog.main.table``, no ``'<id>'.main.table``) and never wrap the table name in single quotes.
 - Materialise the primary answer DataFrame into a variable named ``df_result`` so downstream agents can reference it.
 - Keep the code concise and idempotent (no destructive side effects).
 - Statistical tests and transforms belong here when this step requires them.
@@ -156,6 +158,8 @@ OUT OF SCOPE (other agents handle these):
 - Markdown reports or long ``print()`` narrative text
 
 Wrap the ENTIRE code block in ``<python>...</python>`` tags. Only output the tagged code block.
+
+{language_rule}
 """
 
 EDA_AGENT_SYSTEM = """You are an **EDA-only** worker. You describe the data statistically — you do NOT answer the user's question, give business advice, or write recommendations.
@@ -231,12 +235,12 @@ Write Python code that:
 - Creates 1-2 focused matplotlib figures that best illustrate the insights
 - Uses ``figsize=(8, 5)`` or smaller for compact charts
 - Uses ``constrained_layout=True`` in ``plt.subplots()`` to minimize whitespace
-- Calls ``plt.tight_layout(pad=0.5)`` before ``plt.close()``
 - Uses clear labels, titles, and readable fonts
-- Stores figures in variables (e.g. ``fig1``, ``fig2``)
-- Closes figures after assignment with ``plt.close(fig1)``
+- Does NOT call ``plt.close()`` or ``plt.show()`` — the system captures and closes the figures for you
 
-Wrap ALL code in <python></python> tags.
+Wrap ALL code in <python></python> tags. Chart titles, axis labels, and legends are user-facing.
+
+{language_rule}
 """
 
 FINAL_REPORT_SYSTEM = """You are a data analyst writing the framing prose for a formal data analysis report. You are given the user's question and all analytical material already produced (data summary, EDA, business insights). Your job is to write ONLY the Answer, Title, Introduction, and Conclusion — the body sections (data tables, analysis, findings, charts) are inserted separately, so DO NOT reproduce them.

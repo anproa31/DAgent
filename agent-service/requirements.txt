@@ -21,3 +21,4 @@ pypdf>=5.0
 docx2txt>=0.8
 python-multipart>=0.0.9
 pandas>=2.2
+lingua-language-detector>=2.0.2

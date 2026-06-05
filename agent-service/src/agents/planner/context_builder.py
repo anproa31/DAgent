@@ -65,17 +65,17 @@ def format_failed_attempts(observations: List[Dict[str, Any]]) -> str:
 def format_task_progress(completed_actions: list, execution_plan: list) -> str:
     """DB-GPT-style task progress injected into the planner prompt.
 
-    Shows ✅ for completed steps and ⏳ for pending ones so the LLM knows
+    Marks completed steps [done] and pending ones [pending] so the LLM knows
     which actions have already run and must not be repeated.
     """
     if not execution_plan:
         return ""
-    lines = ["## Task progress (DO NOT re-run ✅ steps):"]
+    lines = ["## Task progress (DO NOT re-run completed steps):"]
     for step in execution_plan:
         action = step.get("action", "")
         if action in ("generate_result", "finish"):
             continue
-        mark = "✅" if action in completed_actions else "⏳"
+        mark = "[done]" if action in completed_actions else "[pending]"
         lines.append(f"  {mark} {action}")
     return "\n".join(lines)
 

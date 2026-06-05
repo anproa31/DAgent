@@ -6,7 +6,7 @@ from agents.shared.state import AgentState
 from agents.shared.worker_context import build_worker_user_message
 from utils.agent_logger import get_logger
 from utils.llm_client import get_async_client, chat_complete
-from utils.prompts import VIZ_AGENT_SYSTEM, format_semantic_context_for_prompt
+from utils.prompts import VIZ_AGENT_SYSTEM, format_semantic_context_for_prompt, format_language_rule
 
 logger = get_logger("viz_agent")
 
@@ -24,6 +24,7 @@ async def viz_agent_node(state: AgentState) -> dict:
         schema=state.get("schema_info", ""),
         query=state.get("query", ""),
         insights=state.get("insights", ""),
+        language_rule=format_language_rule(state.get("language", "en")),
     )
     scoped_task = build_worker_user_message(state, "viz")
     data_summary = state.get("data_summary", "")
@@ -62,10 +63,7 @@ async def viz_agent_node(state: AgentState) -> dict:
         viz_code = re.sub(r"^```python\s*|\s*```$", "", raw.strip(), flags=re.MULTILINE)
         viz_code = viz_code.strip()
 
-    var_names = re.findall(r"\b(?!figsize\b)(fig\w*|figure\w*)\s*(?:,|\s*=)", viz_code)
-    var_names = list(dict.fromkeys(var_names))
-
-    logger.info("generated code (%d chars), vars=%s", len(viz_code), var_names)
+    logger.info("generated code (%d chars)", len(viz_code))
 
     session_id = state.get("session_id", state.get("run_id", "default"))
     if not viz_code:
@@ -83,11 +81,20 @@ async def viz_agent_node(state: AgentState) -> dict:
             "last_observation": obs,
         }
 
+    # Capture every open matplotlib figure deterministically — do NOT rely on the
+    # LLM binding figures to ``fig``-named variables (it frequently does not).
+    capture_var = "_viz_figures"
+    code_to_run = (
+        f"{viz_code}\n\n"
+        "import matplotlib.pyplot as plt\n"
+        f"{capture_var} = [plt.figure(_n) for _n in plt.get_fignums()]\n"
+    )
+
     exec_result = await invoke_tool(
         state,
         "execute_python",
         agent_role="viz",
-        code=viz_code,
+        code=code_to_run,
     )
     if not exec_result.success:
         err = exec_result.error or "Viz execution failed"
@@ -112,14 +119,14 @@ async def viz_agent_node(state: AgentState) -> dict:
         agent_role="viz",
         tool_name="execute_python",
         result=exec_result,
-        summary=f"Generated {len(var_names)} chart(s)",
-        extra_artifacts={"viz_code": viz_code, "viz_var_names": var_names},
+        summary="Generated visualization(s)",
+        extra_artifacts={"viz_code": viz_code, "viz_var_names": [capture_var]},
     )
 
     return {
         "current_agent": "viz",
         "viz_code": viz_code,
-        "viz_var_names": var_names,
+        "viz_var_names": [capture_var],
         "agent_steps": state.get("agent_steps", []) + ["viz"],
         **observe_patch,
     }

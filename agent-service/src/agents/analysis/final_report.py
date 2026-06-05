@@ -193,7 +193,7 @@ async def _build_analytical_report(state: AgentState, session_id: str) -> list:
     # The Answer is the headline — directly resolves the user's question and is
     # rendered first/highlighted so it isn't buried in a generic narrative.
     if answer:
-        content.append({"type": "markdown", "content": f"## ✅ Answer\n{answer}"})
+        content.append({"type": "markdown", "content": f"## Answer\n{answer}"})
     if intro:
         content.append({"type": "markdown", "content": f"## Introduction\n{intro}"})
 
