@@ -10,7 +10,7 @@ from functools import lru_cache
 class Settings:
     datasource_root: str
     code_runner_url: str
-    context_engine_url: str
+    dce_domain_dir: str
     host: str
     port: int
     reload: bool
@@ -32,14 +32,22 @@ class Settings:
     def files_dir(self) -> str:
         return os.path.join(self.datasource_root, "files")
 
+    @property
+    def dce_domain_path(self) -> str:
+        return self.dce_domain_dir
+
 
 @lru_cache
 def get_settings() -> Settings:
     return Settings(
         datasource_root=os.environ.get("DATASOURCE_ROOT", "/data/datasources"),
         code_runner_url=os.environ.get("CODE_RUNNER_URL", "http://sandbox:8001/"),
-        context_engine_url=os.environ.get(
-            "CONTEXT_ENGINE_URL", "http://context-engine:8002/"
+        dce_domain_dir=os.environ.get(
+            "DCE_DOMAIN_DIR",
+            os.path.join(
+                os.environ.get("DATASOURCE_ROOT", "/data/datasources"),
+                "dce_domain",
+            ),
         ),
         host=os.environ.get("HOST", "0.0.0.0"),
         port=int(os.environ.get("PORT", "8000")),

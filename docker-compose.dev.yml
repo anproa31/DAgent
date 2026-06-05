@@ -1,14 +1,6 @@
 name: daa-dev
 
 services:
-  context-engine:
-    build: ./context-engine
-    container_name: daa_dev_context_engine
-    ports:
-      - "8172:8002"
-    networks:
-      - app_network
-
   qdrant:
     image: qdrant/qdrant:latest
     container_name: daa_dev_qdrant
@@ -70,12 +62,14 @@ services:
     environment:
       CODE_RUNNER_URL: ${CODE_RUNNER_URL:-http://sandbox:8001/}
       DATASOURCE_ROOT: /data/datasources
-      CONTEXT_ENGINE_URL: ${CONTEXT_ENGINE_URL:-http://context-engine:8002/}
+      DCE_DOMAIN_DIR: ${DCE_DOMAIN_DIR:-/data/datasources/dce_domain}
+      DCE_OLLAMA_HOST: ${DCE_OLLAMA_HOST:-host.docker.internal}
+      DCE_OLLAMA_PORT: ${DCE_OLLAMA_PORT:-11434}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text-v2-moe}
     networks:
       - app_network
     depends_on:
       - sandbox
-      - context-engine
     volumes:
       - ./app/src:/usr/src/app/src
       - datasource_data:/data
@@ -93,7 +87,10 @@ services:
     environment:
       CODE_RUNNER_URL: ${CODE_RUNNER_URL:-http://sandbox:8001/}
       APP_SERVICE_URL: ${APP_SERVICE_URL:-http://app:8000}
-      CONTEXT_ENGINE_URL: ${CONTEXT_ENGINE_URL:-http://context-engine:8002/}
+      DATASOURCE_ROOT: /data/datasources
+      DCE_DOMAIN_DIR: ${DCE_DOMAIN_DIR:-/data/datasources/dce_domain}
+      DCE_OLLAMA_HOST: ${DCE_OLLAMA_HOST:-host.docker.internal}
+      DCE_OLLAMA_PORT: ${DCE_OLLAMA_PORT:-11434}
       # Chat/run persistence in Postgres (schema auto-created on boot; alembic for versioned migrations)
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://daa:daa@postgres:5432/daa_agent}
       # Set SQL_ECHO=1 to log SQL while debugging
@@ -103,7 +100,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       # Embedding endpoint default; the user overrides it from the Settings UI per request.
       EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://host.docker.internal:11434/v1}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text-v2-moe}
       MEMORY_USER_ID: ${MEMORY_USER_ID:-default}
     networks:
       - app_network
@@ -114,14 +111,13 @@ services:
         condition: service_started
       sandbox:
         condition: service_started
-      context-engine:
-        condition: service_started
       qdrant:
         condition: service_started
       redis:
         condition: service_started
     volumes:
       - ./agent-service:/usr/src/app
+      - datasource_data:/data
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
   frontend:

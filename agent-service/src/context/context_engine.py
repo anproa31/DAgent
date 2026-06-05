@@ -1,11 +1,57 @@
-"""HTTP client for the Databao context-engine service (query-aware /enhance)."""
+"""Query-aware semantic context via databao-context-engine vector search."""
 from __future__ import annotations
 
+import asyncio
+import logging
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import httpx
+from databao_context_engine import DatabaoContextEngine, DatasourceId
 
-from config.settings import CONTEXT_ENGINE_URL
+from config.settings import DCE_DOMAIN_DIR, DCE_SEARCH_LIMIT
+from context.dce_integration import get_domain_manager, patch_dce_ollama
+
+logger = logging.getLogger(__name__)
+
+_DCE_CONFIG_PREFIX = "daa"
+
+
+@lru_cache
+def _get_context_engine(domain_dir: str) -> DatabaoContextEngine:
+    patch_dce_ollama()
+    get_domain_manager(domain_dir)
+    return DatabaoContextEngine(domain_dir=Path(domain_dir))
+
+
+def _registry_ids_from_datasources(datasources: Optional[List[Dict[str, Any]]]) -> List[DatasourceId]:
+    if not datasources:
+        return []
+    ids: List[DatasourceId] = []
+    for ds in datasources:
+        registry_id = ds.get("id")
+        if not registry_id:
+            continue
+        ids.append(DatasourceId.from_string_repr(f"{_DCE_CONFIG_PREFIX}/{registry_id}.yaml"))
+    return ids
+
+
+def _search_context_sync(
+    query: str,
+    *,
+    datasources: Optional[List[Dict[str, Any]]] = None,
+    limit: int,
+) -> str:
+    engine = _get_context_engine(DCE_DOMAIN_DIR)
+    datasource_ids = _registry_ids_from_datasources(datasources)
+    results = engine.search_context(
+        query,
+        limit=limit,
+        datasource_ids=datasource_ids or None,
+    )
+    if not results:
+        return ""
+    return "\n\n".join(result.context_result.strip() for result in results if result.context_result.strip())
 
 
 async def get_enhanced_context(
@@ -15,30 +61,26 @@ async def get_enhanced_context(
     datasources: Optional[List[Dict[str, Any]]] = None,
     fallback: str = "",
 ) -> str:
-    """Call ``POST /enhance`` to produce query-focused semantic context.
+    """Return query-focused semantic context from DCE hybrid search.
 
-    ``context_summary`` should be the aggregated markdown from the app
-    ``/internal/schema`` ``context`` field (built by ``POST /build`` during
-    registration). If the service is unreachable, returns ``fallback`` (callers
-    often pass the full combined schema markdown so prompts still have columns).
+    ``context_summary`` is kept for API compatibility (built during datasource
+    registration). When search returns nothing, falls back to ``context_summary``
+    or the caller-provided ``fallback``.
     """
-    text = (context_summary or "").strip()
+    text = (query or "").strip()
     if not text:
-        return fallback
-
-    payload: Dict[str, Any] = {"context_summary": text, "query": query or ""}
-    if datasources:
-        payload["datasources"] = datasources
+        return (context_summary or "").strip() or fallback
 
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.post(f"{CONTEXT_ENGINE_URL}/enhance", json=payload)
-            response.raise_for_status()
-            data = response.json()
-            out = data.get("enhanced_context", "")
-            if isinstance(out, str) and out.strip():
-                return out
+        enhanced = await asyncio.to_thread(
+            _search_context_sync,
+            text,
+            datasources=datasources,
+            limit=DCE_SEARCH_LIMIT,
+        )
+        if enhanced.strip():
+            return enhanced
     except Exception as exc:
-        print(f"[context_engine] /enhance failed, using fallback: {exc}")
+        logger.warning("DCE search_context failed, using fallback: %s", exc)
 
-    return fallback
+    return (context_summary or "").strip() or fallback

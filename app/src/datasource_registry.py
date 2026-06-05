@@ -21,7 +21,7 @@ from .dce_introspection import (
     introspect_file_datasource,
     parse_connection_string,
 )
-from .infrastructure.external.context_engine_client import ContextEngineClient
+from .infrastructure.external.dce_context_service import DceContextService
 from .infrastructure.external.sandbox_client import SandboxClient
 from .infrastructure.persistence.datasource_repository import DatasourceRepository
 from .models.datasource import (
@@ -94,11 +94,11 @@ class DatasourceRegistry:
         self,
         repository: Optional[DatasourceRepository] = None,
         sandbox: Optional[SandboxClient] = None,
-        context_engine: Optional[ContextEngineClient] = None,
+        dce_context: Optional[DceContextService] = None,
     ) -> None:
         self._repo = repository or DatasourceRepository()
         self._sandbox = sandbox or SandboxClient()
-        self._context_engine = context_engine or ContextEngineClient()
+        self._dce = dce_context or DceContextService(get_settings().dce_domain_path)
         self._lock = threading.RLock()
 
     def list_datasources(self) -> List[DatasourceRecord]:
@@ -168,8 +168,6 @@ class DatasourceRegistry:
                 shutil.rmtree(ds_dir, ignore_errors=True)
             raise HTTPException(status_code=400, detail=f"Introspection failed: {exc}") from exc
 
-        outcome.context_markdown = await self._context_engine.build_context(name, outcome)
-
         config: Dict[str, Any] = {
             "path": stored_path,
             "original_filename": original_filename,
@@ -177,6 +175,14 @@ class DatasourceRegistry:
         if source_url:
             config["source_url"] = source_url
             config["origin"] = "web_fetch"
+
+        outcome.context_markdown = await self._dce.build_context(
+            ds_id,
+            name,
+            kind=DatasourceKind.FILE,
+            type_value=file_type.value,
+            config=config,
+        )
 
         record = self._build_record(
             datasource_id=ds_id,
@@ -231,10 +237,17 @@ class DatasourceRegistry:
                 status_code=400, detail=f"Connection or introspection failed: {exc}"
             ) from exc
 
-        outcome.context_markdown = await self._context_engine.build_context(name, outcome)
+        datasource_id = str(uuid.uuid4())
+        outcome.context_markdown = await self._dce.build_context(
+            datasource_id,
+            name,
+            kind=DatasourceKind.DATABASE,
+            type_value=db_type.value,
+            config=config,
+        )
 
         record = self._build_record(
-            datasource_id=str(uuid.uuid4()),
+            datasource_id=datasource_id,
             name=name,
             kind=DatasourceKind.DATABASE,
             type_value=db_type.value,
@@ -263,6 +276,11 @@ class DatasourceRegistry:
                         shutil.rmtree(parent_dir, ignore_errors=True)
             except Exception as exc:
                 logger.warning("Failed to remove files for %s: %s", datasource_id, exc)
+
+        try:
+            self._dce.remove_datasource(datasource_id)
+        except Exception as exc:
+            logger.warning("DCE cleanup failed for %s: %s", datasource_id, exc)
 
         try:
             await self._sandbox.unregister_datasource(record.id, record.view_names)
@@ -500,4 +518,4 @@ DATASOURCE_ROOT = _settings.datasource_root
 REGISTRY_PATH = _settings.registry_path
 FILES_DIR = _settings.files_dir
 CODE_RUNNER_URL = _settings.code_runner_url
-CONTEXT_ENGINE_URL = _settings.context_engine_url
+DCE_DOMAIN_DIR = _settings.dce_domain_path

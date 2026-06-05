@@ -5,8 +5,13 @@ from __future__ import annotations
 import os
 
 APP_SERVICE_URL = os.getenv("APP_SERVICE_URL", "http://app:8000").rstrip("/")
-CONTEXT_ENGINE_URL = os.getenv("CONTEXT_ENGINE_URL", "http://context-engine:8002").rstrip("/")
 CODE_RUNNER_URL = os.getenv("CODE_RUNNER_URL", "http://sandbox:8001/").rstrip("/")
+
+# Databao Context Engine domain (shared with app via the datasource volume).
+DCE_DOMAIN_DIR = os.getenv(
+    "DCE_DOMAIN_DIR",
+    os.path.join(os.getenv("DATASOURCE_ROOT", "/data/datasources"), "dce_domain"),
+)
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL", "postgresql+psycopg://daa:daa@postgres:5432/daa_agent"
@@ -18,9 +23,14 @@ QDRANT_URL = os.getenv("QDRANT_URL", "http://qdrant:6333").rstrip("/")
 REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379")
 
 # Embedding endpoint. Fallback only — the frontend Settings UI sends per-request overrides.
-# nomic-embed-text emits 768-dim vectors, so Qdrant collections must use size=768.
+# nomic-embed-text-v2-moe emits 768-dim vectors; Qdrant collections must match EMBEDDING_DIMS.
 EMBEDDING_BASE_URL = os.getenv("EMBEDDING_BASE_URL", "http://localhost:11434/v1")
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
+_raw_embedding_model = os.getenv("EMBEDDING_MODEL", "nomic-embed-text-v2-moe")
+EMBEDDING_MODEL = (
+    "nomic-embed-text-v2-moe"
+    if _raw_embedding_model in {"nomic-embed-text", "nomic-embed-text:v1.5"}
+    else _raw_embedding_model
+)
 
 # LLM used by Mem0 fact-extraction + episodic consolidation (OpenAI-compatible endpoint).
 MEMORY_LLM_MODEL = os.getenv("MEMORY_LLM_MODEL", "gpt-4o-mini")
@@ -42,6 +52,9 @@ def _float_env(name: str, default: float) -> float:
     except (TypeError, ValueError):
         return default
 
+
+# Max number of context chunks DCE hybrid search returns per query.
+DCE_SEARCH_LIMIT = _int_env("DCE_SEARCH_LIMIT", 15)
 
 # --- Agent loop / reliability tuning (solution.md P0 + P1) ---
 

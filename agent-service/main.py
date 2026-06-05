@@ -23,6 +23,11 @@ from utils.agent_logger import get_logger, setup_logging
 setup_logging()
 logger = get_logger("agent-service")
 
+# DCE must use host Ollama in Docker; patch before any context search.
+from context.dce_integration import patch_dce_ollama
+
+patch_dce_ollama()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
