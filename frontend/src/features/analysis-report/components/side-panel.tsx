@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { Download, X, Copy, Loader2, Terminal } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Download, X, Copy, Terminal } from 'lucide-react'
 import { toast } from 'sonner'
 import * as XLSX from 'xlsx'
 import { type ActionStep } from '@/hooks/use-analysis'
@@ -22,11 +22,10 @@ export type SidePanelContent =
   | { type: 'code'; content: string }
   | { type: 'table'; content: string }
   | { type: 'step'; content: string; stepData?: ActionStep }
-  | { type: 'thinking'; runId: string }
   | { type: 'execution'; runId: string; executionId: string }
 
 interface SidePanelProps {
-  type: 'code' | 'table' | 'step' | 'thinking' | 'execution'
+  type: 'code' | 'table' | 'step' | 'execution'
   content: string
   stepData?: ActionStep
   runId?: string
@@ -56,10 +55,6 @@ export function SidePanel({
     return <StepPanelContent stepData={stepData} onClose={onClose} />
   }
 
-  if (type === 'thinking' && runId) {
-    return <ThinkingPanelContent runId={runId} onClose={onClose} />
-  }
-
   if (type === 'execution' && runId && executionId) {
     return (
       <ExecutionPanelContent
@@ -71,83 +66,6 @@ export function SidePanel({
   }
 
   return null
-}
-
-const AGENT_LABELS: Record<string, string> = {
-  planner: 'Reasoning',
-  sql: 'SQL generation',
-  python: 'Python generation',
-  eda: 'Exploratory analysis',
-  insight: 'Insights',
-  final_report: 'Report',
-}
-
-function agentLabel(agent: string): string {
-  return AGENT_LABELS[agent] ?? agent.replace(/_/g, ' ')
-}
-
-// Live, token-by-token reasoning/generation transcript for a run.
-function ThinkingPanelContent({
-  runId,
-  onClose,
-}: {
-  runId: string
-  onClose: () => void
-}) {
-  const run = useAgentStore((s) => s.runs.find((r) => r.runId === runId))
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const segments = run?.thinkingSegments ?? []
-  const isActive =
-    !!run &&
-    run.phase !== 'done' &&
-    run.phase !== 'error' &&
-    run.phase !== 'stopped'
-
-  // Follow the stream: keep the latest tokens in view while thinking is active.
-  const lastText = segments.length ? segments[segments.length - 1].text : ''
-  useEffect(() => {
-    if (isActive && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
-  }, [lastText, segments.length, isActive])
-
-  return (
-    <div className='flex h-full min-h-0 w-full min-w-0 flex-col bg-background'>
-      <div className='flex shrink-0 items-center justify-between gap-3 border-b bg-muted/50 px-4 py-3'>
-        <span className='flex min-w-0 items-center gap-2 truncate text-sm font-semibold text-foreground'>
-          Thinking
-          {isActive && (
-            <Loader2 className='h-3.5 w-3.5 animate-spin text-primary' />
-          )}
-        </span>
-        <Button onClick={onClose} variant='outline' size='sm' className='h-8 shrink-0 gap-1.5'>
-          <X className='h-4 w-4' />
-          Close
-        </Button>
-      </div>
-
-      <div ref={scrollRef} className='min-h-0 flex-1 overflow-auto px-4 py-3'>
-        {segments.length === 0 ? (
-          <p className='text-sm text-muted-foreground'>
-            {isActive ? 'Waiting for the model to start thinking…' : 'No reasoning recorded.'}
-          </p>
-        ) : (
-          <div className='space-y-4'>
-            {segments.map((seg) => (
-              <div key={seg.id} className='space-y-1'>
-                <span className='text-[11px] font-medium uppercase tracking-wide text-muted-foreground'>
-                  {agentLabel(seg.agent)}
-                </span>
-                <div className='text-sm leading-relaxed'>
-                  <AIResponse>{seg.text}</AIResponse>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  )
 }
 
 // SQL/Python code + sandbox execution log for a single executed step.
