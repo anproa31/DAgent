@@ -10,6 +10,7 @@ import {
 import { useNavigate, useLocation } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { SidebarLoadingSpinner } from '@/components/shared/spinner/sidebar-loading-spinner'
+import { useLocale, useTranslation } from '@/context/locale-context'
 
 export const useSidebarData = (): {
   data: SidebarData | null
@@ -20,6 +21,8 @@ export const useSidebarData = (): {
   const { history, pinnedIds, isPinned, togglePin, removeFromHistory } = useSharedAnalysisHistory()
   const navigate = useNavigate()
   const location = useLocation()
+  const { locale } = useLocale()
+  const { t } = useTranslation()
 
   const handleDelete = useCallback(
     (deletedId: string) => {
@@ -29,12 +32,12 @@ export const useSidebarData = (): {
           try {
             await deleteSession(deletedId)
           } catch {
-            toast.error('Could not delete conversation on server')
+            toast.error(t('toast.couldNotDeleteConversation'))
             return
           }
         }
         removeFromHistory(deletedId)
-        toast.success('Conversation deleted')
+        toast.success(t('toast.conversationDeleted'))
         if (location.pathname === '/agents') {
           const params = new URLSearchParams(location.search)
           if (params.get('session') === deletedId) {
@@ -43,7 +46,7 @@ export const useSidebarData = (): {
         }
       })()
     },
-    [removeFromHistory, navigate, location.pathname, location.search, history]
+    [removeFromHistory, navigate, location.pathname, location.search, history, t]
   )
 
   const sidebarData = useMemo((): SidebarData | null => {
@@ -76,37 +79,39 @@ export const useSidebarData = (): {
           title: '',
           items: [
             {
-              title: 'All Datasources',
+              title: t('nav.allDatasources'),
               icon: IconDatabase,
               url: '/datasources',
             },
             {
-              title: 'Knowledge Base',
+              title: t('nav.knowledgeBase'),
               icon: IconBook2,
               url: '/knowledge-base',
             },
             {
-              title: 'Skills',
+              title: t('nav.skills'),
               icon: IconWand,
               url: '/skills',
             },
             {
-              title: 'Pinned',
+              id: 'pinned',
+              title: t('nav.pinned'),
               icon: IconPin,
               items: [
                 ...pinnedItems,
                 ...(pinnedItems.length === 0
-                  ? [{ title: 'No pinned conversations', url: '/agents' as const, placeholder: true }]
+                  ? [{ title: t('nav.noPinned'), url: '/agents' as const, placeholder: true }]
                   : []),
               ],
             },
             {
-              title: 'History',
+              id: 'history',
+              title: t('nav.history'),
               icon: IconClock,
               items: [
                 ...historyItems,
                 ...(historyItems.length === 0
-                  ? [{ title: 'No analyses yet', url: '/agents' as const, placeholder: true }]
+                  ? [{ title: t('nav.noHistory'), url: '/agents' as const, placeholder: true }]
                   : []),
               ],
             },
@@ -114,7 +119,7 @@ export const useSidebarData = (): {
         },
       ],
     }
-  }, [tables, history, pinnedIds, isPinned, togglePin, handleDelete])
+  }, [tables, history, pinnedIds, isPinned, togglePin, handleDelete, locale, t])
 
   return {
     data: sidebarData,

@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { CheckCircle2, XCircle, Edit3 } from 'lucide-react'
+import { useTranslation } from '@/context/locale-context'
 
 interface PythonApprovalModalProps {
   open: boolean
@@ -31,6 +32,7 @@ export function PythonApprovalModal({
   const [isEditing, setIsEditing] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
   const [showRejectInput, setShowRejectInput] = useState(false)
+  const { t } = useTranslation()
   const hasCodeChanged = editedCode !== code
 
   useEffect(() => {
@@ -60,17 +62,17 @@ export function PythonApprovalModal({
         <DialogHeader>
           <DialogTitle className='flex items-center gap-2'>
             <Badge variant='outline' className='text-amber-600 border-amber-400'>
-              Human Review Required
+              {t('approval.humanReview')}
             </Badge>
-            Python Code Generated
+            {t('approval.python.title')}
             {risk && (
               <Badge variant='secondary' className='text-xs uppercase'>
-                {risk} risk
+                {t('approval.python.risk', { risk })}
               </Badge>
             )}
           </DialogTitle>
           <DialogDescription>
-            Review the generated Python before it runs in the sandbox.
+            {t('approval.python.description')}
           </DialogDescription>
         </DialogHeader>
 
@@ -86,7 +88,7 @@ export function PythonApprovalModal({
               className='text-xs h-7'
             >
               <Edit3 className='h-3 w-3 mr-1' />
-              {isEditing ? 'Lock' : 'Edit'}
+              {isEditing ? t('common.lock') : t('common.edit')}
             </Button>
           </div>
 
@@ -107,11 +109,10 @@ export function PythonApprovalModal({
         {showRejectInput && (
           <div className='space-y-2'>
             <label className='text-xs text-muted-foreground'>
-              Reason for rejection or edit the code (required — helps the agent
-              regenerate):
+              {t('approval.python.rejectLabel')}
             </label>
             <Textarea
-              placeholder='e.g. "Avoid network calls", "Use df_result instead"…'
+              placeholder={t('approval.python.rejectPlaceholder')}
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
               className='text-sm min-h-20 resize-none'
@@ -128,11 +129,11 @@ export function PythonApprovalModal({
                 onClick={() => setShowRejectInput(true)}
               >
                 <XCircle className='h-4 w-4 mr-2' />
-                Reject & Regenerate
+                {t('approval.sql.rejectRegenerate')}
               </Button>
               <Button onClick={handleApprove}>
                 <CheckCircle2 className='h-4 w-4 mr-2' />
-                {isEditing ? 'Approve Edited Code' : 'Approve & Execute'}
+                {isEditing ? t('approval.python.approveEdited') : t('approval.python.approveExecute')}
               </Button>
             </>
           ) : (
@@ -144,7 +145,7 @@ export function PythonApprovalModal({
                   setRejectReason('')
                 }}
               >
-                Cancel
+                {t('common.cancel')}
               </Button>
               <Button
                 variant='destructive'
@@ -152,7 +153,7 @@ export function PythonApprovalModal({
                 disabled={!rejectReason.trim() && !hasCodeChanged}
               >
                 <XCircle className='h-4 w-4 mr-2' />
-                Send Rejection
+                {t('approval.sql.sendRejection')}
               </Button>
             </>
           )}

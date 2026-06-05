@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { CheckCircle2, XCircle, Edit3 } from 'lucide-react'
+import { useTranslation } from '@/context/locale-context'
 
 interface SQLApprovalModalProps {
   open: boolean
@@ -31,6 +32,7 @@ export function SQLApprovalModal({
   const [isEditing, setIsEditing] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
   const [showRejectInput, setShowRejectInput] = useState(false)
+  const { t } = useTranslation()
   const hasSqlChanged = editedSql !== sql
 
   // Sync edited SQL only when modal opens or sql prop changes from a new run
@@ -59,12 +61,12 @@ export function SQLApprovalModal({
         <DialogHeader>
           <DialogTitle className='flex items-center gap-2'>
             <Badge variant='outline' className='text-amber-600 border-amber-400'>
-              Human Review Required
+              {t('approval.humanReview')}
             </Badge>
-            SQL Query Generated
+            {t('approval.sql.title')}
           </DialogTitle>
           <DialogDescription>
-            Review the generated SQL before it is executed against your database.
+            {t('approval.sql.description')}
             {explanation && (
               <span className='block mt-1 text-foreground/80'>
                 {explanation}
@@ -86,7 +88,7 @@ export function SQLApprovalModal({
               className='text-xs h-7'
             >
               <Edit3 className='h-3 w-3 mr-1' />
-              {isEditing ? 'Lock' : 'Edit'}
+              {isEditing ? t('common.lock') : t('common.edit')}
             </Button>
           </div>
 
@@ -108,10 +110,10 @@ export function SQLApprovalModal({
         {showRejectInput && (
           <div className='space-y-2'>
             <label className='text-xs text-muted-foreground'>
-              Reason for rejection or edit SQL (required — helps the agent regenerate):
+              {t('approval.sql.rejectLabel')}
             </label>
             <Textarea
-              placeholder='e.g. "Missing filter for current month", "Wrong table used"…'
+              placeholder={t('approval.sql.rejectPlaceholder')}
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
               className='text-sm min-h-20 resize-none'
@@ -128,11 +130,11 @@ export function SQLApprovalModal({
                 onClick={() => setShowRejectInput(true)}
               >
                 <XCircle className='h-4 w-4 mr-2' />
-                Reject & Regenerate
+                {t('approval.sql.rejectRegenerate')}
               </Button>
               <Button onClick={handleApprove}>
                 <CheckCircle2 className='h-4 w-4 mr-2' />
-                {isEditing ? 'Approve Edited SQL' : 'Approve & Execute'}
+                {isEditing ? t('approval.sql.approveEdited') : t('approval.sql.approveExecute')}
               </Button>
             </>
           ) : (
@@ -144,7 +146,7 @@ export function SQLApprovalModal({
                   setRejectReason('')
                 }}
               >
-                Cancel
+                {t('common.cancel')}
               </Button>
               <Button
                 variant='destructive'
@@ -152,7 +154,7 @@ export function SQLApprovalModal({
                 disabled={!rejectReason.trim() && !hasSqlChanged}
               >
                 <XCircle className='h-4 w-4 mr-2' />
-                Send Rejection
+                {t('approval.sql.sendRejection')}
               </Button>
             </>
           )}

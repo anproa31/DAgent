@@ -4,6 +4,7 @@ import { RouterProvider } from '@tanstack/react-router'
 import { AnalysisHistoryProvider } from '@/context/analysis-history-context'
 import { SettingsProvider } from '@/context/settings-context'
 import { ThemeProvider } from '@/context/theme-context'
+import { LocaleProvider } from '@/context/locale-context'
 import { FontProvider } from '@/context/font-context'
 import type { AppRouter } from '@/app/router'
 import type { QueryClient } from '@tanstack/react-query'
@@ -20,11 +21,13 @@ export function AppProviders({ queryClient, router, children }: AppProvidersProp
       <AnalysisHistoryProvider>
         <SettingsProvider>
           <QueryClientProvider client={queryClient}>
-            <ThemeProvider defaultTheme='light' storageKey='vite-ui-theme'>
-              <FontProvider>
-                {children ?? <RouterProvider router={router} />}
-              </FontProvider>
-            </ThemeProvider>
+            <LocaleProvider defaultLocale='en' storageKey='vite-ui-locale'>
+              <ThemeProvider defaultTheme='light' storageKey='vite-ui-theme'>
+                <FontProvider>
+                  {children ?? <RouterProvider router={router} />}
+                </FontProvider>
+              </ThemeProvider>
+            </LocaleProvider>
           </QueryClientProvider>
         </SettingsProvider>
       </AnalysisHistoryProvider>

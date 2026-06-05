@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { useTranslation } from '@/context/locale-context'
 
 export const Route = createFileRoute('/_authenticated/skills')({
   component: SkillsPage,
@@ -28,6 +29,7 @@ export const Route = createFileRoute('/_authenticated/skills')({
 const EMPTY = { name: '', description: '', template: '', skill_type: 'sql' }
 
 function SkillsPage() {
+  const { t } = useTranslation()
   const { data: skills = [], isLoading } = useSkills()
   const create = useCreateSkill()
   const update = useUpdateSkill()
@@ -43,7 +45,7 @@ function SkillsPage() {
 
   const save = async () => {
     if (!form.name.trim()) {
-      toast.error('Name is required')
+      toast.error(t('skills.nameRequired'))
       return
     }
     try {
@@ -52,28 +54,26 @@ function SkillsPage() {
           skillId: editing,
           body: { name: form.name, description: form.description, template: form.template },
         })
-        toast.success('Skill updated')
+        toast.success(t('skills.updated'))
       } else {
         await create.mutateAsync(form)
-        toast.success('Skill added')
+        toast.success(t('skills.added'))
       }
       reset()
     } catch {
-      toast.error('Failed to save skill')
+      toast.error(t('skills.saveFailed'))
     }
   }
 
   return (
     <div className="container mx-auto max-w-4xl p-6">
-      <h1 className="text-2xl font-bold">Skills &amp; Templates</h1>
-      <p className="mt-1 text-muted-foreground">
-        Add SQL templates, chart recipes, or pipeline patterns your agent can reuse.
-      </p>
+      <h1 className="text-2xl font-bold">{t('skills.title')}</h1>
+      <p className="mt-1 text-muted-foreground">{t('skills.subtitle')}</p>
 
       <div className="mt-6 space-y-3 rounded-xl border bg-muted/30 p-4">
-        <h2 className="font-semibold">{editing ? 'Edit skill' : 'Add new skill'}</h2>
+        <h2 className="font-semibold">{editing ? t('skills.editSkill') : t('skills.addNew')}</h2>
         <div className="space-y-2">
-          <Label htmlFor="skill-name">Name</Label>
+          <Label htmlFor="skill-name">{t('skills.name')}</Label>
           <Input
             id="skill-name"
             value={form.name}
@@ -81,7 +81,7 @@ function SkillsPage() {
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="skill-desc">Description (used for semantic search)</Label>
+          <Label htmlFor="skill-desc">{t('skills.description')}</Label>
           <Input
             id="skill-desc"
             value={form.description}
@@ -89,7 +89,7 @@ function SkillsPage() {
           />
         </div>
         <div className="space-y-2">
-          <Label>Type</Label>
+          <Label>{t('skills.type')}</Label>
           <Select
             value={form.skill_type}
             onValueChange={(v) => setForm({ ...form, skill_type: v })}
@@ -99,14 +99,14 @@ function SkillsPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="sql">SQL template</SelectItem>
-              <SelectItem value="chart">Chart recipe</SelectItem>
-              <SelectItem value="pipeline">Pipeline pattern</SelectItem>
+              <SelectItem value="sql">{t('skills.sqlTemplate')}</SelectItem>
+              <SelectItem value="chart">{t('skills.chartRecipe')}</SelectItem>
+              <SelectItem value="pipeline">{t('skills.pipelinePattern')}</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="skill-template">Template / code</Label>
+          <Label htmlFor="skill-template">{t('skills.template')}</Label>
           <Textarea
             id="skill-template"
             rows={6}
@@ -117,19 +117,19 @@ function SkillsPage() {
         </div>
         <div className="flex gap-2">
           <Button onClick={save} disabled={create.isPending || update.isPending}>
-            {editing ? 'Save changes' : 'Add skill'}
+            {editing ? t('skills.saveChanges') : t('skills.addSkill')}
           </Button>
           {editing && (
             <Button variant="outline" onClick={reset}>
-              Cancel
+              {t('common.cancel')}
             </Button>
           )}
         </div>
       </div>
 
-      <h2 className="mt-8 mb-3 text-lg font-semibold">All Skills</h2>
+      <h2 className="mt-8 mb-3 text-lg font-semibold">{t('skills.allSkills')}</h2>
       {isLoading ? (
-        <p className="text-muted-foreground">Loading…</p>
+        <p className="text-muted-foreground">{t('common.loading')}</p>
       ) : (
         <div className="space-y-3">
           {skills.map((skill) => (
@@ -139,7 +139,7 @@ function SkillsPage() {
                   <strong>{skill.name}</strong>
                   <Badge variant="outline">{skill.type}</Badge>
                   {skill.is_default && (
-                    <span className="text-xs text-muted-foreground">(built-in)</span>
+                    <span className="text-xs text-muted-foreground">{t('skills.builtin')}</span>
                   )}
                 </div>
                 <div className="flex gap-1">
@@ -156,7 +156,7 @@ function SkillsPage() {
                       })
                     }}
                   >
-                    Edit
+                    {t('common.edit')}
                   </Button>
                   {!skill.is_default && (
                     <Button

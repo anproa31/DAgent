@@ -14,6 +14,7 @@ import {
   type SampleDatasetPresetId,
 } from '@/features/agents/sample-dataset-presets'
 import { toast } from 'sonner'
+import { useTranslation } from '@/context/locale-context'
 
 type AnalysisPresetsProps = {
   availableTableNames: string[]
@@ -46,6 +47,7 @@ export function AnalysisPresets({
     useState<SampleDatasetPresetId | null>(null)
   const [selectedLiteTestId, setSelectedLiteTestId] =
     useState<CsvLiteTestId | null>(null)
+  const { t } = useTranslation()
 
   const applyCsvTables = () => {
     const tables = resolvePresetTables(
@@ -54,10 +56,9 @@ export function AnalysisPresets({
     )
 
     if (tables.length === 0) {
-      toast.error(
-        `No tables found for "${CSV_PRESET.label}". Register sample data from sample_dataset first.`,
-        { description: `Expected: ${CSV_PRESET.description}` }
-      )
+      toast.error(t('presets.noTables', { label: CSV_PRESET.label }), {
+        description: t('presets.expected', { description: CSV_PRESET.description }),
+      })
     }
 
     return tables
@@ -68,7 +69,7 @@ export function AnalysisPresets({
     try {
       prompt = await loadPresetPrompt(preset.id)
     } catch {
-      toast.error(`Failed to load preset prompt for "${preset.label}".`)
+      toast.error(t('presets.failedLoadPreset', { label: preset.label }))
       return
     }
 
@@ -78,10 +79,9 @@ export function AnalysisPresets({
     onApply({ prompt, tables })
 
     if (tables.length === 0) {
-      toast.error(
-        `No tables found for "${preset.label}". Register sample data from sample_dataset first.`,
-        { description: `Expected: ${preset.description}` }
-      )
+      toast.error(t('presets.noTables', { label: preset.label }), {
+        description: t('presets.expected', { description: preset.description }),
+      })
     }
   }
 
@@ -90,7 +90,7 @@ export function AnalysisPresets({
     try {
       prompt = await loadLiteTestPrompt(id)
     } catch {
-      toast.error('Failed to load lite test prompt.')
+      toast.error(t('presets.failedLoadLite'))
       return
     }
 

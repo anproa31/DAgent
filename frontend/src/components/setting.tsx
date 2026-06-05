@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useSettings } from '@/context/settings-context'
+import { useTranslation } from '@/context/locale-context'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,6 +19,7 @@ export function Setting() {
     setEmbeddingModel,
     resetSettings,
   } = useSettings()
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [tempBaseUrl, setTempBaseUrl] = useState(baseUrl)
   const [tempApiKey, setTempApiKey] = useState(apiKey)
@@ -43,17 +45,17 @@ export function Setting() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label="Settings" title="Settings">
+        <Button variant="ghost" size="icon" aria-label={t('settings.aria')} title={t('settings.aria')}>
           <SettingsIcon className="h-5 w-5" />
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>API Settings</DialogTitle>
+          <DialogTitle>{t('settings.title')}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label htmlFor="base_url">Base URL</Label>
+            <Label htmlFor="base_url">{t('settings.baseUrl')}</Label>
             <Input
               id="base_url"
               placeholder="https://example.com"
@@ -62,7 +64,7 @@ export function Setting() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="api_key">API Key</Label>
+            <Label htmlFor="api_key">{t('settings.apiKey')}</Label>
             <Input
               id="api_key"
               placeholder="sk-..."
@@ -72,7 +74,7 @@ export function Setting() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="embed_url">Embedding Base URL</Label>
+            <Label htmlFor="embed_url">{t('settings.embedUrl')}</Label>
             <Input
               id="embed_url"
               placeholder="http://localhost:11434/v1"
@@ -81,23 +83,20 @@ export function Setting() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="embed_model">Embedding Model</Label>
+            <Label htmlFor="embed_model">{t('settings.embedModel')}</Label>
             <Input
               id="embed_model"
               placeholder="nomic-embed-text"
               value={tempEmbedModel}
               onChange={(e) => setTempEmbedModel(e.target.value)}
             />
-            <p className="text-[11px] text-muted-foreground">
-              Used for knowledge-base ingestion + retrieval. Changing the model after documents
-              are uploaded invalidates existing vectors — re-upload to re-index.
-            </p>
+            <p className="text-[11px] text-muted-foreground">{t('settings.embedHint')}</p>
           </div>
           <div className="flex justify-between gap-2 pt-2">
-            <Button variant="secondary" type="button" onClick={onReset}>Reset</Button>
+            <Button variant="secondary" type="button" onClick={onReset}>{t('common.reset')}</Button>
             <div className="flex gap-2">
-              <Button variant="outline" type="button" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button type="button" onClick={onSave}>Save</Button>
+              <Button variant="outline" type="button" onClick={() => setOpen(false)}>{t('common.cancel')}</Button>
+              <Button type="button" onClick={onSave}>{t('common.save')}</Button>
             </div>
           </div>
         </div>

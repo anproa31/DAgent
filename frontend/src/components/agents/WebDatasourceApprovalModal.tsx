@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { CheckCircle2, Globe, XCircle } from 'lucide-react'
+import { useTranslation } from '@/context/locale-context'
 
 export interface WebDiscoverCandidate {
   title: string
@@ -48,6 +49,7 @@ export function WebDatasourceApprovalModal({
   const [selected, setSelected] = useState<string[]>([])
   const [rejectReason, setRejectReason] = useState('')
   const [showRejectInput, setShowRejectInput] = useState(false)
+  const { t } = useTranslation()
 
   useEffect(() => {
     if (open) {
@@ -80,14 +82,13 @@ export function WebDatasourceApprovalModal({
         <DialogHeader>
           <DialogTitle className='flex items-center gap-2'>
             <Badge variant='outline' className='text-blue-700 border-blue-400'>
-              Human Review Required
+              {t('approval.humanReview')}
             </Badge>
             <Globe className='h-4 w-4' />
-            Import data from the web?
+            {t('approval.web.title')}
           </DialogTitle>
           <DialogDescription>
-            The agent found public dataset sources because existing datasources do not cover this
-            question. Approve only the URLs you trust before they are added to your workspace.
+            {t('approval.web.description')}
             {proposal?.reason && (
               <span className='block mt-2 text-foreground/80'>{proposal.reason}</span>
             )}
@@ -96,16 +97,16 @@ export function WebDatasourceApprovalModal({
 
         {proposal?.query && (
           <div className='rounded-md bg-muted/60 p-3 text-sm'>
-            <span className='font-medium'>Search need:</span> {proposal.query}
+            <span className='font-medium'>{t('approval.web.searchNeed')}</span> {proposal.query}
           </div>
         )}
 
         <div className='space-y-3'>
           <p className='text-xs uppercase tracking-wide text-muted-foreground'>
-            Proposed dataset URLs
+            {t('approval.web.proposedUrls')}
           </p>
           {urls.length === 0 ? (
-            <p className='text-sm text-muted-foreground'>No URLs were proposed.</p>
+            <p className='text-sm text-muted-foreground'>{t('approval.web.noUrls')}</p>
           ) : (
             urls.map((url) => {
               const meta = proposal?.candidates?.find((c) => c.url === url)
@@ -140,13 +141,13 @@ export function WebDatasourceApprovalModal({
         {showRejectInput && (
           <div className='space-y-2'>
             <label className='text-xs text-muted-foreground'>
-              Reason for declining (helps the agent choose another path):
+              {t('approval.web.rejectLabel')}
             </label>
             <Textarea
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
               className='text-sm min-h-20 resize-none'
-              placeholder='e.g. "Use only internal HR data", "Wrong geography"'
+              placeholder={t('approval.web.rejectPlaceholder')}
             />
           </div>
         )}
@@ -160,21 +161,21 @@ export function WebDatasourceApprovalModal({
                 onClick={() => setShowRejectInput(true)}
               >
                 <XCircle className='h-4 w-4 mr-2' />
-                Decline import
+                {t('approval.web.decline')}
               </Button>
               <Button onClick={handleApprove} disabled={selected.length === 0}>
                 <CheckCircle2 className='h-4 w-4 mr-2' />
-                Approve & import ({selected.length})
+                {t('approval.web.approveImport', { count: selected.length })}
               </Button>
             </>
           ) : (
             <>
               <Button variant='ghost' onClick={() => setShowRejectInput(false)}>
-                Cancel
+                {t('common.cancel')}
               </Button>
               <Button variant='destructive' onClick={handleRejectSubmit}>
                 <XCircle className='h-4 w-4 mr-2' />
-                Confirm decline
+                {t('approval.web.confirmDecline')}
               </Button>
             </>
           )}

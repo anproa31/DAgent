@@ -27,10 +27,12 @@ import { AgentRunItem } from '@/features/agents/components/AgentRunItem'
 import { AgentComposer } from '@/features/agents/components/AgentComposer'
 import { useAgentSessionLoader } from '@/features/agents/hooks/use-agent-session-loader'
 import { useAgentStreamHandlers } from '@/features/agents/hooks/use-agent-stream-handlers'
+import { useTranslation } from '@/context/locale-context'
 
 const agentsRouteApi = getRouteApi('/_authenticated/agents')
 
 export default function AgentsPage() {
+  const { t } = useTranslation()
   const { baseUrl, apiKey, embeddingBaseUrl, embeddingModel } = useSettings()
   const { data: tables } = useTableList()
   const { data: modelData } = useModelListByMode(false)
@@ -193,7 +195,7 @@ export default function AgentsPage() {
       const trimmed = rawQuery.trim()
       if (!trimmed) return
       if (!tables?.length) {
-        toast.error('Connect at least one table first.')
+        toast.error(t('agents.connectTableFirst'))
         return
       }
 
@@ -233,7 +235,7 @@ export default function AgentsPage() {
         })
 
         if (startError || !run_id) {
-          toast.error(startError || 'Failed to start run')
+          toast.error(startError || t('agents.failedStartRun'))
           setSubmitStatus('ready')
           return
         }
@@ -274,7 +276,7 @@ export default function AgentsPage() {
           })
         )
       } catch {
-        toast.error('Failed to start analysis')
+        toast.error(t('agents.failedStartAnalysis'))
         setSubmitStatus('ready')
       }
     },
@@ -349,7 +351,7 @@ export default function AgentsPage() {
       try {
         await approveSQL(approvalRun.runId, editedSql)
       } catch {
-        toast.error('Failed to send approval')
+        toast.error(t('agents.failedApproval'))
       }
     },
     [approvalRun, setPhase, updatePendingSql]
@@ -362,7 +364,7 @@ export default function AgentsPage() {
       try {
         await rejectSQL(approvalRun.runId, reason, sql)
       } catch {
-        toast.error('Failed to send rejection')
+        toast.error(t('agents.failedRejection'))
       }
     },
     [approvalRun, setPhase]
@@ -375,7 +377,7 @@ export default function AgentsPage() {
       try {
         await approveSQL(approvalRun.runId, undefined, { code: editedCode })
       } catch {
-        toast.error('Failed to send approval')
+        toast.error(t('agents.failedApproval'))
       }
     },
     [approvalRun, setPhase]
@@ -388,7 +390,7 @@ export default function AgentsPage() {
       try {
         await rejectSQL(approvalRun.runId, reason, undefined, undefined, code)
       } catch {
-        toast.error('Failed to send rejection')
+        toast.error(t('agents.failedRejection'))
       }
     },
     [approvalRun, setPhase]
@@ -401,7 +403,7 @@ export default function AgentsPage() {
       try {
         await rejectSQL(approvalRun.runId, reason)
       } catch {
-        toast.error('Failed to send rejection')
+        toast.error(t('agents.failedRejection'))
       }
     },
     [approvalRun, setPhase]
@@ -417,7 +419,7 @@ export default function AgentsPage() {
           name,
         })
       } catch {
-        toast.error('Failed to send approval')
+        toast.error(t('agents.failedApproval'))
       }
     },
     [approvalRun, setPhase]
@@ -462,9 +464,9 @@ export default function AgentsPage() {
     <>
       <Header fixed>
         <div className='flex flex-col justify-center'>
-          <span className='font-semibold text-sm leading-tight'>Assistant</span>
+          <span className='font-semibold text-sm leading-tight'>{t('agents.title')}</span>
           <span className='text-[11px] text-muted-foreground leading-tight'>
-            The center stages focused on chat, streaming analysis, and quick actions.
+            {t('agents.subtitle')}
           </span>
         </div>
       </Header>
@@ -475,9 +477,9 @@ export default function AgentsPage() {
         {runs.length === 0 ? (
           <div className='mx-auto max-w-4xl flex flex-col items-center pt-[calc(50vh-200px)] px-4'>
             <div className='mb-6 text-center'>
-              <h1 className='text-4xl font-bold tracking-tight'>Assistant</h1>
+              <h1 className='text-4xl font-bold tracking-tight'>{t('agents.title')}</h1>
               <p className='text-muted-foreground text-lg mt-2'>
-                Ask a business question and let multiple AI agents collaborate to analyze your data.
+                {t('agents.heroSubtitle')}
               </p>
             </div>
             <div className='w-full max-w-3xl'>
