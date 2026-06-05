@@ -6,7 +6,7 @@ import re
 
 from langgraph.types import interrupt
 
-from agents.executor.python_risk import HIGH, MEDIUM, assess_python_risk
+from agents.workers.executor.python_risk import HIGH, MEDIUM, assess_python_risk
 from agents.shared.act import invoke_tool, observe_from_tool
 from agents.shared.data_discovery import extract_data_discovery_error
 from agents.shared.observations import create_observation

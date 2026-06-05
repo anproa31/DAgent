@@ -105,22 +105,6 @@ export interface SqlGeneratedEvent {
   query: string
 }
 
-export interface WebDiscoverCandidate {
-  title: string
-  url: string
-  snippet?: string
-  score?: number
-  reason?: string
-}
-
-export interface WebDatasourceProposal {
-  query: string
-  reason: string
-  selected_urls: string[]
-  candidates: WebDiscoverCandidate[]
-  proposed_name?: string
-}
-
 export interface AnswerChunkEvent {
   content: string
 }
@@ -212,11 +196,11 @@ export const startRun = async (
 export const approveSQL = async (
   runId: string,
   sql?: string,
-  opts?: { selected_urls?: string[]; name?: string; code?: string }
+  opts?: { code?: string }
 ): Promise<{ success: boolean }> => {
   const res = await agentClient.post<{ success: boolean }>(
     `/agent/runs/${runId}/approve`,
-    { sql, selected_urls: opts?.selected_urls, name: opts?.name, code: opts?.code }
+    { sql, code: opts?.code }
   )
   return res.data
 }
@@ -225,12 +209,11 @@ export const rejectSQL = async (
   runId: string,
   reason: string,
   sql?: string,
-  selected_urls?: string[],
   code?: string
 ): Promise<{ success: boolean }> => {
   const res = await agentClient.post<{ success: boolean }>(
     `/agent/runs/${runId}/reject`,
-    { reason, sql, selected_urls, code }
+    { reason, sql, code }
   )
   return res.data
 }
@@ -277,7 +260,6 @@ export interface SSEHandlers {
   onThinkingChunk?: (data: ThinkingChunkEvent) => void
   onAgentUpdate?: (data: AgentUpdateEvent) => void
   onSqlGenerated?: (data: SqlGeneratedEvent) => void
-  onWebDatasourceProposed?: (data: WebDatasourceProposal) => void
   onPythonReviewRequired?: (data: PythonReviewEvent) => void
   onExecutionResult?: (data: ExecutionResultEvent) => void
   onAnswerChunk?: (data: AnswerChunkEvent) => void
@@ -313,10 +295,6 @@ export function streamRun(runId: string, handlers: SSEHandlers): EventSource {
 
   es.addEventListener('sql_generated', (e: MessageEvent) => {
     handlers.onSqlGenerated?.(parse(e.data))
-  })
-
-  es.addEventListener('web_datasource_proposed', (e: MessageEvent) => {
-    handlers.onWebDatasourceProposed?.(parse(e.data))
   })
 
   es.addEventListener('python_review_required', (e: MessageEvent) => {

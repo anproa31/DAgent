@@ -17,7 +17,7 @@ async def run_tool(
     **kwargs: Any,
 ) -> ToolResult:
     # ``tool_name`` (not ``name``) so a tool whose own parameter is called
-    # ``name`` (e.g. get_variable, register_web_data) can be passed via kwargs
+    # ``name`` (e.g. get_variable) can be passed via kwargs
     # without colliding with this positional argument.
     if state is not None:
         gate = gate_tool_call(state, tool_name, agent_role=agent_role)
@@ -41,10 +41,6 @@ async def run_tool(
         for param in tool.parameters.values()
         if param.required and kwargs.get(param.name) in (None, "")
     ]
-    if tool_name in ("discover_web_data", "propose_web_data") and not kwargs.get("query") and not kwargs.get("url"):
-        missing.append("query")
-    if tool_name == "register_web_data" and not kwargs.get("urls"):
-        missing.append("urls")
     if missing:
         msg = f"Missing required parameters: {', '.join(missing)}"
         return ToolResult(

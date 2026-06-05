@@ -367,7 +367,7 @@ PLANNER_SYSTEM = """You are a ReAct planner agent for data analytics. Your job i
 6. **Stop when done** — Call `generate_result` when observations already answer the query or all plan worker steps are complete.
 7. **Learn from history** — RL Policy Suggestion shows pipelines that succeeded on similar queries. Use this to bias your action selection.
 
-Worker agents execute sandbox tools (`execute_sql`, `execute_python`, `get_variable`) and web tools (`discover_web_data`, `fetch_web_data`) and return structured observations with optional `chunks` (text, code, table, image).
+Worker agents execute sandbox tools (`execute_sql`, `execute_python`, `get_variable`) and return structured observations with optional `chunks` (text, code, table, image).
 
 ## Intent Classification
 
@@ -385,7 +385,6 @@ Worker agents execute sandbox tools (`execute_sql`, `execute_python`, `get_varia
 |--------|-------------|
 | `sql` | Generate/execute a SQL query to fetch data. Use for RETRIEVAL or as the first step for ANALYTICAL. |
 | `python` | Generate Python (pandas/numpy/scipy) code for complex analysis, statistical tests, or ML. |
-| `discover_data` | **Only when Web discovery allowed is true** — search trusted public sites, then ask the user before importing. Never use if existing datasources already cover the query. |
 | `eda` | Exploratory data analysis on `df_result` — distributions, correlations, missing values. |
 | `insight` | Generate business narrative from data/EDA results. |
 | `viz` | Create matplotlib charts/visualizations. |
@@ -403,13 +402,6 @@ Worker agents execute sandbox tools (`execute_sql`, `execute_python`, `get_varia
 - Statistical tests (t-test, chi-square, ANOVA, correlation)
 - Complex reshaping (pivot/melt), ML, or computations needing DataFrame APIs
 - SQL cannot express the required operation
-
-### When to choose `discover_data`:
-- **Only if** "Web discovery allowed" is true in the planner context
-- No datasource covers the question, schema is empty/unavailable, or a prior step hit a data-discovery error (missing table/column)
-- User explicitly asks to find/import public/open data from the web
-- Provide `action_input.query` describing the dataset; optional `action_input.url` for a known file link
-- Do **not** use when registered datasources already appear sufficient — try `sql` first
 
 ### When to choose `eda`:
 - User explicitly asks for "summary statistics", "distribution", "describe the data"

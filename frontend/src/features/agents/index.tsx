@@ -8,7 +8,6 @@ import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { SQLApprovalModal } from '@/components/agents/SQLApprovalModal'
 import { PythonApprovalModal } from '@/components/agents/PythonApprovalModal'
-import { WebDatasourceApprovalModal } from '@/components/agents/WebDatasourceApprovalModal'
 import { SidePanel, type SidePanelContent } from '@/features/analysis-report/components/side-panel'
 import { toast } from 'sonner'
 import {
@@ -394,38 +393,9 @@ export default function AgentsPage() {
       if (!approvalRun) return
       setPhase(approvalRun.runId, 'running')
       try {
-        await rejectSQL(approvalRun.runId, reason, undefined, undefined, code)
+        await rejectSQL(approvalRun.runId, reason, undefined, code)
       } catch {
         toast.error(t('agents.failedRejection'))
-      }
-    },
-    [approvalRun, setPhase]
-  )
-
-  const handleRejectWebDatasource = useCallback(
-    async (reason: string) => {
-      if (!approvalRun) return
-      setPhase(approvalRun.runId, 'running')
-      try {
-        await rejectSQL(approvalRun.runId, reason)
-      } catch {
-        toast.error(t('agents.failedRejection'))
-      }
-    },
-    [approvalRun, setPhase]
-  )
-
-  const handleApproveWebDatasource = useCallback(
-    async (selectedUrls: string[], name?: string) => {
-      if (!approvalRun) return
-      setPhase(approvalRun.runId, 'running')
-      try {
-        await approveSQL(approvalRun.runId, undefined, {
-          selected_urls: selectedUrls,
-          name,
-        })
-      } catch {
-        toast.error(t('agents.failedApproval'))
       }
     },
     [approvalRun, setPhase]
@@ -561,13 +531,6 @@ export default function AgentsPage() {
         risk={approvalRun?.pendingPythonRisk ?? ''}
         onApprove={handleApprovePython}
         onReject={handleRejectPython}
-      />
-
-      <WebDatasourceApprovalModal
-        open={!!approvalRun && approvalRun.approvalKind === 'web_datasource'}
-        proposal={approvalRun?.pendingWebProposal ?? null}
-        onApprove={handleApproveWebDatasource}
-        onReject={handleRejectWebDatasource}
       />
     </>
   )

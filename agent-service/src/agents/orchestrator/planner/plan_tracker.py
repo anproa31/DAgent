@@ -7,7 +7,7 @@ from typing import Any, Dict, List
 
 from agents.shared.state import AgentState
 from config.settings import LOOP_DETECTION_REPEAT, LOOP_DETECTION_WINDOW
-from orchestration.routing.plan import (
+from agents.orchestrator.planner.plan import (
     OrchestrationMode,
     PlanStep,
     get_next_planned_action,
@@ -21,7 +21,6 @@ _OBSERVATION_TO_ACTION = {
     "sql": "exec",
     "code_executor": "exec",
     "python": "exec",
-    "web_discover": "discover_data",
     "eda": "eda",
     "insight": "insight",
     "viz": "viz",

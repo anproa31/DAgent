@@ -7,14 +7,14 @@ import json
 import re
 from typing import Any, List
 
-from agents.reflection.analytics_reflection_agent import get_analytics_reflection_agent
-from orchestration.orchestrator.core import Orchestrator
-from agents.reflection.helpers import build_data_context_from_history, flatten_report_content
-from agents.reflection.memory import record_trajectory
-from agents.reflection.pattern import should_run_reflection
+from agents.orchestrator.reflection.analytics_reflection_agent import get_analytics_reflection_agent
+from agents.orchestrator.core import Orchestrator
+from agents.orchestrator.reflection.helpers import build_data_context_from_history, flatten_report_content
+from agents.orchestrator.reflection.memory import record_trajectory
+from agents.orchestrator.reflection.pattern import should_run_reflection
 from agents.shared.state import AgentState
 from config.settings import MAX_REFLECTION_PASSES, MAX_REFLECTION_RERUNS
-from orchestration.routing.plan import update_plan_from_reflection
+from agents.orchestrator.planner.plan import update_plan_from_reflection
 from utils.agent_logger import get_logger
 from utils.prompts import format_semantic_context_for_prompt, format_language_rule
 

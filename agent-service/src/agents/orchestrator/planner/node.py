@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import asyncio
 
-from agents.planner.analytics_react_agent import MAX_PLANNER_STEPS, get_analytics_react_agent
-from agents.planner.history import format_rl_suggestion
-from agents.planner.plan_tracker import sync_plan_with_completed, update_completed_actions
-from agents.reflection.memory import get_policy_suggestion
+from agents.orchestrator.planner.analytics_react_agent import MAX_PLANNER_STEPS, get_analytics_react_agent
+from agents.orchestrator.planner.history import format_rl_suggestion
+from agents.orchestrator.planner.plan_tracker import sync_plan_with_completed, update_completed_actions
+from agents.orchestrator.reflection.memory import get_policy_suggestion
 from agents.shared.agent_anatomy import (
     LoopPhase,
     StopReason,

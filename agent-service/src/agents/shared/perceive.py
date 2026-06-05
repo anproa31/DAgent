@@ -9,8 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from agents.planner.context_builder import build_planner_context
-from agents.planner.memory_context import build_memory_context
+from agents.orchestrator.planner.context_builder import build_planner_context
+from agents.orchestrator.planner.memory_context import build_memory_context
 from agents.shared.agent_anatomy import LoopPhase
 from agents.shared.state import AgentState
 from context.context_engine import get_enhanced_context
@@ -19,7 +19,7 @@ from context.schema_service import (
     fetch_schema_payload,
     get_datasources,
 )
-from orchestration.routing.plan import format_plan_for_prompt, get_remaining_plan_summary
+from agents.orchestrator.planner.plan import format_plan_for_prompt, get_remaining_plan_summary
 from utils.agent_logger import get_logger
 from utils.prompts import format_semantic_context_for_prompt
 

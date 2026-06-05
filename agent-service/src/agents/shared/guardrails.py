@@ -11,7 +11,6 @@ from typing import Any, Dict, Optional
 from agents.shared.agent_anatomy import is_budget_exhausted
 from agents.shared.specialized_agent import get_agent_def, is_tool_allowed
 from agents.shared.state import AgentState
-from agents.shared.web_discover_policy import should_use_discover_action
 from config.settings import BUDGET_COST_PER_PLANNER_STEP, BUDGET_COST_PER_TOOL
 
 
@@ -30,7 +29,6 @@ VALID_PLANNER_ACTIONS = frozenset(
         "exec",
         "sql",
         "python",
-        "discover_data",
         "eda",
         "insight",
         "viz",
@@ -43,7 +41,6 @@ _ACTION_ALIASES = {
     "final_answer": "generate_result",
     "final": "generate_result",
     "finish": "generate_result",
-    "web_discover": "discover_data",
 }
 
 
@@ -71,16 +68,6 @@ def gate_planner_action(
         )
 
     # 2. scope
-    if normalized == "discover_data":
-        allowed, scope_reason = should_use_discover_action(state)
-        if not allowed:
-            return GateResult(
-                allowed=True,
-                reason=f"discover_data blocked: {scope_reason}",
-                normalized_action="exec",
-                normalized_input=action_input,
-            )
-
     agent_def = get_agent_def(normalized)
     if agent_def and action_input.get("task"):
         task = str(action_input["task"])

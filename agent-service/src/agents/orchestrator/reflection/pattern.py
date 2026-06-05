@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 
-from agents.reflection.helpers import flatten_report_content
+from agents.orchestrator.reflection.helpers import flatten_report_content
 from agents.shared.state import AgentState
 from config.settings import REFLECTION_QUALITY_THRESHOLD
 

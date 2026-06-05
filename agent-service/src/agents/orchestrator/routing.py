@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from agents.shared.state import AgentState
-from orchestration.orchestrator.core import Orchestrator
+from agents.orchestrator.core import Orchestrator
 from utils.agent_logger import get_logger
 
 logger = get_logger("planner")

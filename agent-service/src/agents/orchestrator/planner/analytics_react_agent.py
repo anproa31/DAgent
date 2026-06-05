@@ -9,10 +9,9 @@ from typing import Any, Dict, List, Tuple
 from agent_patterns.patterns import ReActAgent
 from langchain_openai import ChatOpenAI
 
-from agents.planner.plan_tracker import resolve_planner_action
+from agents.orchestrator.planner.plan_tracker import resolve_planner_action
 from agents.shared.llm_endpoint import normalize_base_url
 from agents.shared.state import AgentState, PlannerStep
-from agents.shared.web_discover_policy import should_use_discover_action
 from config.settings import FORCED_EXIT_THRESHOLD, MAX_PLANNER_STEPS
 from orchestration.streaming import ThinkingTokenCallback
 
@@ -25,7 +24,6 @@ You are a data analytics ReAct planner. Choose ONE tool per step.
 
 Available tools:
 - exec — fetch or analyze data; the executor auto-selects SQL or Python for the task. Use this for ALL data retrieval and analysis-code steps.
-- discover_data — web data discovery (only when allowed)
 - eda — exploratory data analysis on df_result
 - insight — business narrative from data/EDA
 - viz — matplotlib charts
@@ -65,7 +63,6 @@ class AnalyticsReActAgent(ReActAgent):
         "exec",
         "sql",
         "python",
-        "discover_data",
         "eda",
         "insight",
         "viz",
@@ -171,11 +168,6 @@ class AnalyticsReActAgent(ReActAgent):
         action = _normalize_tool_name(raw_action.get("tool_name", ""))
         action_input = _parse_action_input(raw_action.get("tool_input", ""))
 
-        discover_allowed, discover_reason = should_use_discover_action(state)
-        if action == "discover_data" and not discover_allowed:
-            action = "exec"
-            thought = f"{thought} [discover_data blocked: {discover_reason}. Using exec.]".strip()
-
         if action not in self.VALID_ACTIONS:
             action = "exec"
             thought = f"{thought} [invalid action normalized to exec]".strip()
@@ -241,7 +233,6 @@ def _normalize_tool_name(tool_name: str) -> str:
         "final_answer": "generate_result",
         "final": "generate_result",
         "finish": "generate_result",
-        "web_discover": "discover_data",
     }
     return aliases.get(normalized, normalized or "exec")
 

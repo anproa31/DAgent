@@ -25,6 +25,9 @@ class SpecializedAgentDef:
     knowledge_sources: FrozenSet[str]
     tools: FrozenSet[str]
     description: str = ""
+    # Plumbing node (runtime router / mechanical executor), not a diagram AGENT
+    # worker. Excluded from list_specialized_agents() by default.
+    internal: bool = False
 
 
 _KNOWLEDGE_SHARED = frozenset(
@@ -49,6 +52,7 @@ SPECIALIZED_AGENTS: Dict[str, SpecializedAgentDef] = {
         knowledge_sources=_KNOWLEDGE_SHARED,
         tools=frozenset(),
         description="Runtime router — dispatches to sql or python worker.",
+        internal=True,
     ),
     "sql": SpecializedAgentDef(
         role="sql",
@@ -69,6 +73,7 @@ SPECIALIZED_AGENTS: Dict[str, SpecializedAgentDef] = {
         knowledge_sources=frozenset({"sql_draft", "session_id"}),
         tools=frozenset({"execute_sql", "get_variable", "get_variables"}),
         description="Executes user-approved SQL in the sandbox.",
+        internal=True,
     ),
     "python": SpecializedAgentDef(
         role="python",
@@ -79,18 +84,6 @@ SPECIALIZED_AGENTS: Dict[str, SpecializedAgentDef] = {
         knowledge_sources=_KNOWLEDGE_SHARED | frozenset({"kb_documents", "skill_ids"}),
         tools=frozenset({"execute_python", "get_variable", "get_variables", "rollback"}),
         description="Generates and executes Python in the sandbox.",
-    ),
-    "web_discover": SpecializedAgentDef(
-        role="web_discover",
-        graph_node="web_discover",
-        step_title="Discover external data",
-        deliverable="Propose and register web datasets when local schema is insufficient.",
-        forbidden="Do NOT answer the user query directly.",
-        knowledge_sources=_KNOWLEDGE_SHARED,
-        tools=frozenset(
-            {"discover_web_data", "propose_web_data", "register_web_data", "fetch_web_data"}
-        ),
-        description="Web data discovery with HITL approval.",
     ),
     "eda": SpecializedAgentDef(
         role="eda",
@@ -150,7 +143,6 @@ PLANNER_ACTION_TO_AGENT: Dict[str, str] = {
     "exec": "exec",
     "sql": "sql",
     "python": "python",
-    "discover_data": "web_discover",
     "eda": "eda",
     "insight": "insight",
     "viz": "viz",
@@ -160,9 +152,17 @@ PLANNER_ACTION_TO_AGENT: Dict[str, str] = {
 
 
 def get_agent_def(role: str) -> Optional[SpecializedAgentDef]:
-    """Resolve agent definition by role or planner action alias."""
-    role = _ROLE_ALIASES.get(role, role)
-    mapped = PLANNER_ACTION_TO_AGENT.get(role, role)
+    """Resolve agent definition by role or planner action alias.
+
+    Direct registry entries resolve to their own definition first — so internal
+    plumbing nodes (``exec``, ``code_executor``) carry a self-contained tool
+    scope instead of inheriting the ``sql`` worker's via ``_ROLE_ALIASES``. Only
+    roles that are not direct entries fall back to alias / planner-action lookup.
+    """
+    if role in SPECIALIZED_AGENTS:
+        return SPECIALIZED_AGENTS[role]
+    resolved = _ROLE_ALIASES.get(role, role)
+    mapped = PLANNER_ACTION_TO_AGENT.get(resolved, resolved)
     return SPECIALIZED_AGENTS.get(mapped)
 
 
@@ -184,5 +184,16 @@ def build_knowledge_slice(state: dict, role: str) -> Dict[str, object]:
     return {key: state.get(key) for key in agent.knowledge_sources if key in state}
 
 
-def list_specialized_agents() -> List[SpecializedAgentDef]:
-    return list(SPECIALIZED_AGENTS.values())
+def is_internal(role: str) -> bool:
+    """True if ``role`` is a plumbing node (router/executor), not a diagram AGENT worker."""
+    agent = get_agent_def(role)
+    return bool(agent and agent.internal)
+
+
+def list_specialized_agents(include_internal: bool = False) -> List[SpecializedAgentDef]:
+    """The specialized AGENT workers (diagram #1).
+
+    Internal plumbing nodes (``exec`` router, ``code_executor``) are excluded
+    unless ``include_internal=True``.
+    """
+    return [a for a in SPECIALIZED_AGENTS.values() if include_internal or not a.internal]

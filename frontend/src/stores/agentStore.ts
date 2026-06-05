@@ -24,23 +24,7 @@ export type RunPhase =
   /** User closed the SSE stream (stop button); backend may still be running. */
   | 'stopped'
 
-export type ApprovalKind = 'sql' | 'web_datasource' | 'python' | null
-
-export interface WebDiscoverCandidate {
-  title: string
-  url: string
-  snippet?: string
-  score?: number
-  reason?: string
-}
-
-export interface WebDatasourceProposal {
-  query: string
-  reason: string
-  selected_urls: string[]
-  candidates: WebDiscoverCandidate[]
-  proposed_name?: string
-}
+export type ApprovalKind = 'sql' | 'python' | null
 
 export interface AgentRun {
   runId: string
@@ -54,7 +38,6 @@ export interface AgentRun {
   // HITL SQL
   pendingSql: string
   pendingSqlExplanation: string
-  pendingWebProposal: WebDatasourceProposal | null
   // HITL Python (medium-risk review)
   pendingPythonCode: string
   pendingPythonRisk: string
@@ -100,7 +83,6 @@ interface AgentStore {
   handleExecutionResult: (runId: string, data: ExecutionResultEvent) => void
   handleAgentUpdate: (runId: string, data: AgentUpdateEvent) => void
   handleSqlGenerated: (runId: string, data: SqlGeneratedEvent) => void
-  handleWebDatasourceProposed: (runId: string, data: WebDatasourceProposal) => void
   handlePythonReviewRequired: (runId: string, data: PythonReviewEvent) => void
   updatePendingSql: (runId: string, sql: string) => void
   handleAnswerChunk: (runId: string, data: AnswerChunkEvent) => void
@@ -167,7 +149,6 @@ export const useAgentStore = create<AgentStore>()(
           approvalKind: null,
           pendingSql: '',
           pendingSqlExplanation: '',
-          pendingWebProposal: null,
           pendingPythonCode: '',
           pendingPythonRisk: '',
           streamingAnswer: '',
@@ -267,18 +248,6 @@ export const useAgentStore = create<AgentStore>()(
             approvalKind: 'sql',
             pendingSql: data.sql,
             pendingSqlExplanation: data.explanation,
-            pendingWebProposal: null,
-          }),
-        })),
-
-      handleWebDatasourceProposed: (runId, data) =>
-        set((s) => ({
-          runs: updateRun(s.runs, runId, {
-            phase: 'awaiting_approval',
-            approvalKind: 'web_datasource',
-            pendingWebProposal: data,
-            pendingSql: '',
-            pendingSqlExplanation: '',
           }),
         })),
 
@@ -291,7 +260,6 @@ export const useAgentStore = create<AgentStore>()(
             pendingPythonRisk: data.risk,
             pendingSql: '',
             pendingSqlExplanation: '',
-            pendingWebProposal: null,
           }),
         })),
 
@@ -363,7 +331,6 @@ export const useAgentStore = create<AgentStore>()(
               executions: [],
               pendingSql: '',
               pendingSqlExplanation: '',
-              pendingWebProposal: null,
               pendingPythonCode: '',
               pendingPythonRisk: '',
               approvalKind: null,

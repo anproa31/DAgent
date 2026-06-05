@@ -68,11 +68,6 @@ class AgentState(TypedDict, total=False):
     sql_approved: bool
     sql_rejection_reason: str
 
-    # Web discover HITL
-    web_discover_proposal: Dict[str, Any]
-    web_discover_approved: bool
-    web_discover_rejection_reason: str
-
     # Python code for sandbox (used in execution_mode == "python")
     python_code: str
 

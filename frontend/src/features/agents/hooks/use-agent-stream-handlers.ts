@@ -21,7 +21,6 @@ export function useAgentStreamHandlers() {
     handleExecutionResult,
     handleAgentUpdate,
     handleSqlGenerated,
-    handleWebDatasourceProposed,
     handlePythonReviewRequired,
     handleAnswerChunk,
     handleDone,
@@ -52,7 +51,6 @@ export function useAgentStreamHandlers() {
         onExecutionResult: (d) => handleExecutionResult(runId, d),
         onAgentUpdate: (d) => handleAgentUpdate(runId, d),
         onSqlGenerated: (d) => handleSqlGenerated(runId, d),
-        onWebDatasourceProposed: (d) => handleWebDatasourceProposed(runId, d),
         onPythonReviewRequired: (d) => handlePythonReviewRequired(runId, d),
         onAnswerChunk: (d) => handleAnswerChunk(runId, d),
         onTitleUpdated: (d) => {
@@ -80,7 +78,6 @@ export function useAgentStreamHandlers() {
       handleExecutionResult,
       handleAgentUpdate,
       handleSqlGenerated,
-      handleWebDatasourceProposed,
       handlePythonReviewRequired,
       handleAnswerChunk,
       handleDone,

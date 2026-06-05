@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import List
 
-from orchestration.routing.plan import OrchestrationMode, detect_explore_intent
+from agents.orchestrator.planner.plan import OrchestrationMode, detect_explore_intent
 
 _VALID_STEPS = frozenset({"exec", "sql", "python", "eda", "insight", "viz"})
 

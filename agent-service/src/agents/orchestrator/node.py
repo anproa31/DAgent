@@ -7,7 +7,7 @@ import json
 import re
 from typing import List
 
-from agents.reflection.memory import get_policy_suggestion
+from agents.orchestrator.reflection.memory import get_policy_suggestion
 from agents.shared.agent_anatomy import LoopPhase
 from agents.shared.language import detect_response_language
 from agents.shared.state import AgentState
@@ -17,13 +17,13 @@ from context.schema_service import (
     fetch_schema_payload,
     get_datasources,
 )
-from orchestration.routing.intent_classifier import (
+from agents.orchestrator.planner.intent_classifier import (
     _VIZ_ONLY_PATTERNS,
     _LIGHT_ANALYTICAL_PATTERNS,
     quick_classify,
 )
-from orchestration.routing.pipeline import normalise_pipeline
-from orchestration.routing.plan import (
+from agents.orchestrator.planner.pipeline import normalise_pipeline
+from agents.orchestrator.planner.plan import (
     build_execution_plan,
     detect_explore_intent,
     select_orchestration_mode,
