@@ -103,9 +103,21 @@ class MemoryManager:
 
         return "\n\n".join(ctx)
 
-    async def end_session(self) -> dict[str, Any]:
+    async def end_session(
+        self,
+        *,
+        llm_model: str = "",
+        llm_base_url: str = "",
+        llm_api_key: str = "",
+    ) -> dict[str, Any]:
         snapshot = _safe(lambda: self.working.clear(), {}, "working.clear")
-        return await self._consolidator.run(session_id=self.session_id, session_snapshot=snapshot)
+        return await self._consolidator.run(
+            session_id=self.session_id,
+            session_snapshot=snapshot,
+            llm_model=llm_model,
+            llm_base_url=llm_base_url,
+            llm_api_key=llm_api_key,
+        )
 
 
 def _safe(fn, default, tag):

@@ -83,11 +83,27 @@ async def viz_agent_node(state: AgentState) -> dict:
 
     # Capture every open matplotlib figure deterministically — do NOT rely on the
     # LLM binding figures to ``fig``-named variables (it frequently does not).
+    # Drop cosmetic-only duplicates: figures whose title + axis labels are
+    # identical convey the same information, so keep only the first.
     capture_var = "_viz_figures"
     code_to_run = (
         f"{viz_code}\n\n"
         "import matplotlib.pyplot as plt\n"
-        f"{capture_var} = [plt.figure(_n) for _n in plt.get_fignums()]\n"
+        "def _viz_signature(_f):\n"
+        "    _st = getattr(_f, '_suptitle', None)\n"
+        "    _parts = [_st.get_text() if _st is not None else '']\n"
+        "    for _ax in _f.get_axes():\n"
+        "        _parts += [_ax.get_title(), _ax.get_xlabel(), _ax.get_ylabel()]\n"
+        "    return '|'.join(_parts)\n"
+        "_viz_seen = set()\n"
+        f"{capture_var} = []\n"
+        "for _n in plt.get_fignums():\n"
+        "    _fig = plt.figure(_n)\n"
+        "    _sig = _viz_signature(_fig)\n"
+        "    if _sig in _viz_seen:\n"
+        "        continue\n"
+        "    _viz_seen.add(_sig)\n"
+        f"    {capture_var}.append(_fig)\n"
     )
 
     exec_result = await invoke_tool(

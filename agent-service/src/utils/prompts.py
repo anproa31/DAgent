@@ -232,11 +232,13 @@ Visualization target (context only): {query}
 Prior insights (optional reference — do NOT reproduce as text): {insights}
 
 Write Python code that:
-- Creates 1-2 focused matplotlib figures that best illustrate the insights
-- Uses ``figsize=(8, 5)`` or smaller for compact charts
-- Uses ``constrained_layout=True`` in ``plt.subplots()`` to minimize whitespace
-- Uses clear labels, titles, and readable fonts
-- Does NOT call ``plt.close()`` or ``plt.show()`` — the system captures and closes the figures for you
+- Creates exactly ONE focused matplotlib figure that best answers the question. Only add a second figure if it shows fundamentally DIFFERENT information (different variables or a different analytical view).
+- NEVER produces multiple charts of the same data that differ only cosmetically (e.g. different colors, markers, or annotation styles). Every figure you emit MUST convey distinct information. Redundant near-duplicate charts are a failure.
+- Uses ``figsize=(8, 5)`` or larger so titles and tick labels never overlap.
+- Always passes ``constrained_layout=True`` to ``plt.subplots()`` / ``plt.figure()`` so labels and titles are laid out without collisions.
+- Gives the figure a single title: use EITHER ``ax.set_title(...)`` for a single axes OR one ``fig.suptitle(...)`` for subplots — never both, and never stack two titles on the same axes.
+- Uses clear axis labels and readable fonts.
+- Does NOT call ``plt.close()`` or ``plt.show()`` — the system captures and closes the figures for you.
 
 Wrap ALL code in <python></python> tags. Chart titles, axis labels, and legends are user-facing.
 
@@ -281,6 +283,40 @@ TITLE: <one concise, descriptive title — plain text, no markdown, no quotes>
 <1-3 short paragraphs: reprise each big question with its answer, add any recommendations the insights support, then note limitations or sensible next questions/future work.>
 
 {language_rule}
+"""
+
+REPRODUCTION_CODE_SYSTEM = """You produce **copy-paste reproduction code** so the user can re-run this data retrieval against their ORIGINAL data source, outside this tool.
+
+Internally the tool ran everything through a DuckDB sandbox where each datasource is exposed as a view; that DuckDB code is given below FOR REFERENCE ONLY. The user does NOT have that sandbox, so you must rewrite the data-retrieval logic into code that runs directly against the native source.
+
+Match the code to each datasource's native type:
+- csv → Python using pandas (``pd.read_csv``), then the equivalent pandas transforms.
+- excel → Python using pandas (``pd.read_excel``).
+- parquet → Python using pandas (``pd.read_parquet``).
+- postgres → SQL in PostgreSQL dialect.
+- mysql → SQL in MySQL dialect.
+- mssql → SQL in T-SQL dialect.
+- sqlite → SQL in SQLite dialect.
+- any other database → SQL in that engine's dialect.
+
+Rules:
+- Reproduce ONLY the data-retrieval / transformation logic shown in the executed code. Do NOT add visualization, narration, insights, or explanation prose.
+- Use the real table and column names from the executed code.
+- Use clearly-marked PLACEHOLDERS for anything environment-specific: file paths (e.g. ``"path/to/your_file.csv"``) and database connections (host/dbname/user/password). NEVER invent real paths or credentials.
+- The code must be runnable once the user fills the placeholders. Include the necessary imports / connection scaffold (for SQL sources, a minimal connect-and-run snippet is fine, but the SQL itself is the point).
+- If the analysis spans multiple datasources of different types, emit one labeled code block per source and show how they combine.
+- Keep it minimal — no extra options or defensive code.
+
+Output ONLY fenced markdown code block(s) in the appropriate language (```python or ```sql). A single short ``#`` or ``--`` comment line naming the source may precede a block; otherwise emit no prose.
+
+Datasources (native type and the internal view names that map to them):
+{datasources}
+
+Executed DuckDB SQL (reference — rewrite to native form):
+{executed_sql}
+
+Executed DuckDB Python (reference — rewrite to native form):
+{executed_python}
 """
 
 REPORT_TEMPLATE = """# Analysis Report

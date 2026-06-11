@@ -70,6 +70,10 @@ class AgentState(TypedDict, total=False):
 
     # Python code for sandbox (used in execution_mode == "python")
     python_code: str
+    # Planner task signature of the last executed Python step. Lets a genuinely
+    # new Python computation regenerate + re-prompt (HITL), while a redundant
+    # re-route of the same task still short-circuits to the cached result.
+    executed_python_signature: str
 
     # Sandbox execution outputs
     data_summary: str

@@ -171,7 +171,11 @@ async def _consolidate_memory(run: RunState, initial_input: dict, final_state) -
         if run.insights:
             wm.add_message("assistant", run.insights[:4000])
 
-        result = await mgr.end_session()
+        result = await mgr.end_session(
+            llm_model=initial_input.get("model") or "",
+            llm_base_url=initial_input.get("base_url") or "",
+            llm_api_key=initial_input.get("api_key") or "",
+        )
         print(f"[memory] consolidated run {run.run_id}: {result}")
     except Exception as e:  # pragma: no cover - consolidation is best-effort
         print(f"[memory] consolidation skipped for run {run.run_id}: {e}")

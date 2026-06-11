@@ -6,12 +6,16 @@ import re
 
 from langgraph.types import interrupt
 
-from agents.workers.executor.python_risk import HIGH, MEDIUM, assess_python_risk
+from agents.workers.executor.python_risk import HIGH, assess_python_risk
 from agents.shared.act import invoke_tool, observe_from_tool
 from agents.shared.data_discovery import extract_data_discovery_error
 from agents.shared.observations import create_observation
 from agents.shared.state import AgentState
-from agents.shared.worker_context import build_worker_user_message, check_python_scope_violations
+from agents.shared.worker_context import (
+    build_worker_user_message,
+    check_python_scope_violations,
+    get_planner_action_input,
+)
 from orchestration.streaming import make_delta_emitter
 from utils.agent_logger import get_logger
 from utils.llm_client import chat_complete, get_async_client
@@ -20,12 +24,32 @@ from utils.prompts import PYTHON_AGENT_SYSTEM, format_semantic_context_for_promp
 logger = get_logger("python_agent")
 
 
+def _python_task_signature(state: AgentState) -> str:
+    """Identify the planner's current Python task so a new computation is told
+    apart from a redundant re-route of the one already executed."""
+    action_input = get_planner_action_input(state)
+    note = (
+        action_input.get("task")
+        or action_input.get("note")
+        or action_input.get("objective")
+        or ""
+    ).strip()
+    return f"{state.get('current_action') or 'python'}|{note}"
+
+
 async def python_agent_node(state: AgentState) -> dict:
     logger.info("enter query=%r", state["query"][:80])
 
-    # Short-circuit: Python code already executed and data is available.
-    if state.get("python_code") and state.get("result_var_names"):
-        logger.info("Python already executed — returning cached observation")
+    task_signature = _python_task_signature(state)
+
+    # Short-circuit only when this is the SAME task already executed — re-routing
+    # to Python for a NEW task must regenerate code and re-prompt (HITL).
+    if (
+        state.get("python_code")
+        and state.get("result_var_names")
+        and task_signature == state.get("executed_python_signature", "")
+    ):
+        logger.info("Python already executed for this task — returning cached observation")
         obs = create_observation(
             agent_name="python",
             status="success",
@@ -114,39 +138,40 @@ async def python_agent_node(state: AgentState) -> dict:
             "last_observation": obs,
         }
 
-    if risk == MEDIUM:
-        approval = interrupt(
-            {
-                "type": "python_review",
-                "code": python_code,
-                "risk": MEDIUM,
-                "query": state["query"],
-            }
-        )
-        approved = approval.get("approved", False)
-        edited_code = (approval.get("code") or python_code).strip()
-        rejection_reason = approval.get("reason", "")
-        logger.info("python HITL approved=%s edited=%s", approved, edited_code != python_code)
+    # Always require human approval before running Python (same HITL behavior as
+    # SQL). HIGH-risk code is blocked above and never reaches this point.
+    approval = interrupt(
+        {
+            "type": "python_review",
+            "code": python_code,
+            "risk": risk,
+            "query": state["query"],
+        }
+    )
+    approved = approval.get("approved", False)
+    edited_code = (approval.get("code") or python_code).strip()
+    rejection_reason = approval.get("reason", "")
+    logger.info("python HITL approved=%s edited=%s", approved, edited_code != python_code)
 
-        if not approved:
-            obs = create_observation(
-                agent_name="python",
-                status="rejected",
-                summary=f"Python execution rejected: {rejection_reason or 'User declined'}",
-                artifacts={"python_code": edited_code, "python_risk": MEDIUM, "data_summary": ""},
-                error=rejection_reason or "User rejected Python execution",
-                next_hint="Adjust the approach per the user's feedback or try sql instead.",
-            )
-            return {
-                "current_agent": "python",
-                "python_code": edited_code,
-                "python_risk": MEDIUM,
-                "data_summary": "",
-                "result_var_names": [],
-                "agent_steps": state.get("agent_steps", []) + ["python"],
-                "last_observation": obs,
-            }
-        python_code = edited_code
+    if not approved:
+        obs = create_observation(
+            agent_name="python",
+            status="rejected",
+            summary=f"Python execution rejected: {rejection_reason or 'User declined'}",
+            artifacts={"python_code": edited_code, "python_risk": risk, "data_summary": ""},
+            error=rejection_reason or "User rejected Python execution",
+            next_hint="Adjust the approach per the user's feedback or try sql instead.",
+        )
+        return {
+            "current_agent": "python",
+            "python_code": edited_code,
+            "python_risk": risk,
+            "data_summary": "",
+            "result_var_names": [],
+            "agent_steps": state.get("agent_steps", []) + ["python"],
+            "last_observation": obs,
+        }
+    python_code = edited_code
 
     exec_result = await invoke_tool(
         state,
@@ -213,6 +238,7 @@ async def python_agent_node(state: AgentState) -> dict:
     return {
         "current_agent": "python",
         "python_code": python_code,
+        "executed_python_signature": task_signature,
         "data_summary": data_summary,
         "result_var_names": ["df_result"],
         "error": "",

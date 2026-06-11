@@ -102,11 +102,17 @@ class SemanticMemory:
 
     # ── writes ───────────────────────────────────────────────────────────────
     def store_fact(self, fact: str, category: str = "general") -> None:
-        """Programmatic facts: glossary, KPIs, preferences (LLM inference on)."""
+        """Store a pre-extracted durable fact verbatim (infer=False → no LLM).
+
+        Facts arrive already distilled by the consolidator's run LLM, so mem0's own
+        extraction step is redundant — and it would otherwise call the mem0 ``llm``
+        config (MEMORY_LLM_MODEL), which need not exist on a per-request provider.
+        """
         self.system.add(
             messages=[{"role": "user", "content": fact}],
             user_id=self.user_id,
             metadata={"category": category},
+            infer=False,
         )
 
     def store_chunk(self, chunk: str, source_filename: str, chunk_index: int) -> None:

@@ -3,35 +3,102 @@ from infrastructure.sandbox.code_runner import get_variable_results
 from orchestration.streaming import make_delta_emitter
 from utils.agent_logger import get_logger
 from utils.llm_client import get_async_client, chat_complete
-from utils.prompts import RETRIEVAL_RESPONSE_SYSTEM, FINAL_REPORT_SYSTEM, format_language_rule
+from utils.prompts import (
+    RETRIEVAL_RESPONSE_SYSTEM,
+    FINAL_REPORT_SYSTEM,
+    REPRODUCTION_CODE_SYSTEM,
+    format_language_rule,
+)
 
 logger = get_logger("final_report")
 
 
-def _appendix_block(state: AgentState) -> dict | None:
-    """Annotated Appendix holding the SQL and Python that produced the results.
+def _format_datasources_for_repro(datasources: list) -> str:
+    """Compact summary of the registered datasources for the reproduction prompt."""
+    lines: list[str] = []
+    for ds in datasources:
+        views = ds.get("view_names", [])
+        if not views:
+            continue
+        tables = ", ".join(t.get("name", "") for t in ds.get("tables", []) if t.get("name"))
+        line = f"- {ds.get('name', '')} (type: {ds.get('type', 'unknown')}); views: {', '.join(views)}"
+        if tables:
+            line += f"; tables: {tables}"
+        lines.append(line)
+    return "\n".join(lines)
 
-    Computer code belongs in the appendix (data-analysis-report convention),
-    annotated so a technical reviewer can follow what was run.
+
+def _executed_code_fallback(sql: str, py: str) -> str:
+    """Show the code that actually ran when native reproduction isn't possible."""
+    parts: list[str] = []
+    if sql:
+        parts.append(f"```sql\n{sql}\n```")
+    if py:
+        parts.append(f"```python\n{py}\n```")
+    return "\n\n".join(parts)
+
+
+async def _native_retrieval_code(state: AgentState, sql: str, py: str) -> str:
+    """Rewrite the executed DuckDB logic into source-native reproduction code.
+
+    Falls back to the raw executed code if datasource metadata is missing or the
+    LLM call fails, so the report never loses the code that produced the results.
     """
+    ds_summary = _format_datasources_for_repro(state.get("datasources", []))
+    if not ds_summary:
+        return _executed_code_fallback(sql, py)
+
+    client = get_async_client(state.get("base_url", ""), state.get("api_key", ""))
+    prompt = REPRODUCTION_CODE_SYSTEM.format(
+        datasources=ds_summary,
+        executed_sql=sql or "(none)",
+        executed_python=py or "(none)",
+    )
+    try:
+        text = await chat_complete(
+            client,
+            state.get("model", ""),
+            [
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": "Produce the native reproduction code."},
+            ],
+            temperature=0.1,
+            log_tag="final_report",
+        )
+    except Exception as exc:
+        logger.warning("reproduction code synthesis failed: %s", exc)
+        return _executed_code_fallback(sql, py)
+
+    text = (text or "").strip()
+    return text or _executed_code_fallback(sql, py)
+
+
+async def _appendix_blocks(state: AgentState) -> list:
+    """Appendix split into source-native Data Retrieval code and Visualization code.
+
+    The retrieval code matches each datasource's native type (CSV → pandas,
+    Postgres → Postgres SQL, …) so the user can replicate it on their own; the
+    visualization code is shown as-is, separated from the retrieval code.
+    """
+    sql = (state.get("sql_draft") or "").strip()
+    py = (state.get("python_code") or "").strip()
+    viz = (state.get("viz_code") or "").strip()
+
     parts: list[str] = []
 
-    sql = (state.get("sql_draft") or "").strip()
-    if sql:
-        note = state.get("sql_explanation", "")
-        parts.append("### Query (SQL)")
-        if note:
-            parts.append(f"_{note}_")
-        parts.append(f"```sql\n{sql}\n```")
+    if sql or py:
+        retrieval = await _native_retrieval_code(state, sql, py)
+        if retrieval:
+            parts.append("### Data Retrieval Code")
+            parts.append(retrieval)
 
-    code = (state.get("python_code") or "").strip()
-    if code:
-        parts.append("### Analysis Code (Python)")
-        parts.append(f"```python\n{code}\n```")
+    if viz:
+        parts.append("### Visualization Code")
+        parts.append(f"```python\n{viz}\n```")
 
     if not parts:
-        return None
-    return {"type": "markdown", "content": "## Appendix\n" + "\n\n".join(parts)}
+        return []
+    return [{"type": "markdown", "content": "## Appendix\n" + "\n\n".join(parts)}]
 
 
 async def _synthesize_framing(state: AgentState, session_id: str) -> tuple[str, str, str, str]:
@@ -169,9 +236,7 @@ async def _build_retrieval_report(state: AgentState, session_id: str) -> list:
         except Exception as exc:
             logger.warning("retrieval response LLM failed: %s", exc)
 
-    appendix = _appendix_block(state)
-    if appendix:
-        content.append(appendix)
+    content.extend(await _appendix_blocks(state))
 
     return content
 
@@ -182,7 +247,7 @@ async def _build_analytical_report(state: AgentState, session_id: str) -> list:
     Layout leads with a direct Answer to the user's question, then follows the
     standard data-analysis-report shape:
     Title → Answer → Introduction → Body (Data / Analysis / Key Findings / Charts)
-    → Conclusion → Appendix (annotated SQL & Python code).
+    → Conclusion → Appendix (source-native retrieval code + visualization code).
     """
     content = []
 
@@ -227,9 +292,7 @@ async def _build_analytical_report(state: AgentState, session_id: str) -> list:
     if conclusion:
         content.append({"type": "markdown", "content": f"## Conclusion\n{conclusion}"})
 
-    # --- Appendix: code that produced the results ---
-    appendix = _appendix_block(state)
-    if appendix:
-        content.append(appendix)
+    # --- Appendix: source-native retrieval code + visualization code ---
+    content.extend(await _appendix_blocks(state))
 
     return content
