@@ -66,7 +66,7 @@ All API services use **FastAPI** + **Uvicorn**. Python **3.11** (`app`, `agent-s
 | **Docker Compose** | Dev (`docker-compose.dev.yml`) and prod (`docker-compose.yml`) stacks |
 | **Qdrant** | Vector store for long-term memory |
 | **Redis** | Working-memory cache |
-| **SQLite** | Agent chat sessions and run metadata (`agent-service`) |
+| **PostgreSQL** | Agent chat sessions and run metadata (`agent-service`) |
 
 ## Key Features
 
