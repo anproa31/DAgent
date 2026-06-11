@@ -1,6 +1,7 @@
 import { ThemeSwitch } from '@/components/theme-switch'
 import { Setting } from '@/components/setting'
-import { SidebarFooter, SidebarTrigger, useSidebar } from '@/components/ui/sidebar'
+import { LanguageSwitch } from '@/components/language-switch'
+import { SidebarFooter, useSidebar } from '@/components/ui/sidebar'
 import { cn } from '@/lib/utils'
 
 export function SidebarFooterActions() {
@@ -23,11 +24,11 @@ export function SidebarFooterActions() {
               <ThemeSwitch />
               <Setting />
             </div>
-            <SidebarTrigger variant='outline' className='shrink-0' />
+            <LanguageSwitch />
           </>
         ) : (
           <>
-            <SidebarTrigger variant='outline' className='shrink-0' />
+            <LanguageSwitch />
             <ThemeSwitch />
             <Setting />
           </>

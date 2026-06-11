@@ -9,8 +9,9 @@ from typing import Any, AsyncGenerator, List, Optional
 
 from langgraph.types import Command
 
-from agents.planner.analytics_react_agent import MAX_PLANNER_STEPS
-from config.settings import HITL_TIMEOUT_SECONDS
+from agents.orchestrator.planner.analytics_react_agent import MAX_PLANNER_STEPS
+from agents.shared.agent_anatomy import init_run_budget
+from config.settings import HITL_TIMEOUT_SECONDS, MAX_RUN_BUDGET_UNITS
 from infrastructure.database.connection import async_session_maker
 from infrastructure.repositories import run_repository, session_repository
 from interfaces.api.session_title import update_session_title_if_empty
@@ -41,7 +42,6 @@ class RunState:
         self.sql_explanation: str = ""
         self.sql_rejection_reason: str = ""
         self.pending_approval_type: str = ""
-        self.web_discover_proposal: dict = {}
         self.python_code: str = ""
         self.python_risk: str = ""
         self.insights: str = ""
@@ -75,6 +75,7 @@ def make_done_event(run: RunState) -> dict:
             "completion_reason": run.completion_reason,
             "steps_used": run.steps_used,
             "steps_budget": MAX_PLANNER_STEPS,
+            "run_budget_limit": MAX_RUN_BUDGET_UNITS,
             "content": run.report_content,
             "insights": run.insights,
         }
@@ -170,7 +171,11 @@ async def _consolidate_memory(run: RunState, initial_input: dict, final_state) -
         if run.insights:
             wm.add_message("assistant", run.insights[:4000])
 
-        result = await mgr.end_session()
+        result = await mgr.end_session(
+            llm_model=initial_input.get("model") or "",
+            llm_base_url=initial_input.get("base_url") or "",
+            llm_api_key=initial_input.get("api_key") or "",
+        )
         print(f"[memory] consolidated run {run.run_id}: {result}")
     except Exception as e:  # pragma: no cover - consolidation is best-effort
         print(f"[memory] consolidation skipped for run {run.run_id}: {e}")
@@ -321,7 +326,7 @@ def _extract_interrupt_value(graph_state) -> dict:
 
 
 async def _handle_hitl_interrupt(run: RunState, config: dict) -> bool:
-    """Pause for SQL or web-datasource approval; return True if graph should continue."""
+    """Pause for SQL or Python approval; return True if graph should continue."""
     graph_state = compiled_graph.get_state(config)
     if not graph_state.next:
         return False
@@ -333,13 +338,7 @@ async def _handle_hitl_interrupt(run: RunState, config: dict) -> bool:
     interrupt_type = interrupt_value.get("type", "sql_review")
     run.pending_approval_type = interrupt_type
 
-    if interrupt_type == "web_datasource_review":
-        run.web_discover_proposal = interrupt_value
-        await run.event_queue.put(
-            {"event": "web_datasource_proposed", "data": interrupt_value}
-        )
-        resume_message = "Resuming analysis after web datasource approval..."
-    elif interrupt_type == "python_review":
+    if interrupt_type == "python_review":
         run.python_code = interrupt_value.get("code", "")
         run.python_risk = interrupt_value.get("risk", "medium")
         await run.event_queue.put(
@@ -481,6 +480,7 @@ def build_initial_state(
         "session_id": session_id,
         "run_id": run_id,
         "query": query,
+        "language": "",
         "tables": tables,
         "model": model,
         "base_url": base_url,
@@ -514,13 +514,12 @@ def build_initial_state(
         "rerun_count": 0,
         "python_risk": "",
         "completion_reason": "",
+        "loop_phase": "perceive",
+        "run_budget": init_run_budget(),
         "sql_draft": "",
         "sql_explanation": "",
         "sql_approved": False,
         "sql_rejection_reason": "",
-        "web_discover_proposal": {},
-        "web_discover_approved": False,
-        "web_discover_rejection_reason": "",
         "python_code": "",
         "data_summary": "",
         "result_var_names": [],

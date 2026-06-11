@@ -134,12 +134,12 @@ class ProceduralMemory:
             query_filter = Filter(
                 must=[FieldCondition(key="type", match=MatchValue(value=skill_type))]
             )
-        results = self.client.search(
+        results = self.client.query_points(
             collection_name=self.COLLECTION,
-            query_vector=self._embed(query),
+            query=self._embed(query),
             limit=top_k,
             query_filter=query_filter,
-        )
+        ).points
         return [r.payload for r in results]
 
     def get_by_ids(self, skill_ids: list[str]) -> list[dict]:

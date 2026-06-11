@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any, List, Optional
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
-from sqlalchemy import JSON
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -53,11 +53,11 @@ class AgentRun(Base):
     sql_approved: Mapped[bool] = mapped_column(Boolean, default=False)
     pending_approval: Mapped[bool] = mapped_column(Boolean, default=False)
     insights: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    report_content: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
-    agent_steps: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    report_content: Mapped[Optional[Any]] = mapped_column(JSONB, nullable=True)
+    agent_steps: Mapped[Optional[Any]] = mapped_column(JSONB, nullable=True)
     # Streaming artifacts replayed on reload (real-time thinking + execution cards).
-    thinking_segments: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
-    executions: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    thinking_segments: Mapped[Optional[Any]] = mapped_column(JSONB, nullable=True)
+    executions: Mapped[Optional[Any]] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

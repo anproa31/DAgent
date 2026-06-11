@@ -76,12 +76,12 @@ class EpisodicMemory:
         return episode_id
 
     def retrieve_similar(self, query: str, top_k: int = 3) -> list[dict]:
-        results = self.client.search(
+        results = self.client.query_points(
             collection_name=self.COLLECTION,
-            query_vector=self._embed(query),
+            query=self._embed(query),
             limit=top_k,
             query_filter=Filter(
                 must=[FieldCondition(key="user_id", match=MatchValue(value=self.user_id))]
             ),
-        )
+        ).points
         return [r.payload for r in results]

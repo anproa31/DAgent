@@ -2,15 +2,18 @@ fastapi
 uvicorn[standard]
 requests
 httpx
-pydantic
+pydantic>=2.12.4,<3
 python-multipart
 markdown
 tabulate
 
 # Multi-datasource introspection
-duckdb>=1.0.0
+duckdb>=1.4.3
 pandas
 openpyxl
+
+# Semantic context (in-process, replaces the context-engine microservice)
+databao-context-engine[mysql,postgresql]>=0.7.0,<0.8
 
 openai==1.74.0
 

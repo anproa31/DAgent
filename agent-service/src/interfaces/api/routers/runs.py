@@ -4,7 +4,7 @@ import uuid
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
-from agents.reflection.memory import get_rl_memory
+from agents.orchestrator.reflection.memory import get_rl_memory
 from infrastructure.database.connection import async_session_maker
 from infrastructure.repositories import run_repository, session_repository
 from interfaces.dto.requests import ApproveRequest, RejectRequest, StartRunRequest
@@ -82,16 +82,7 @@ async def approve_run(run_id: str, body: ApproveRequest):
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
 
-    if run.pending_approval_type == "web_datasource_review":
-        proposal = run.web_discover_proposal or {}
-        selected = body.selected_urls or proposal.get("selected_urls") or []
-        run.approval_data = {
-            "approved": True,
-            "type": "web_datasource_review",
-            "selected_urls": selected,
-            "name": body.name or proposal.get("proposed_name"),
-        }
-    elif run.pending_approval_type == "python_review":
+    if run.pending_approval_type == "python_review":
         code = body.code or run.python_code or ""
         run.approval_data = {"approved": True, "type": "python_review", "code": code}
         run.python_code = code
@@ -110,14 +101,7 @@ async def reject_run(run_id: str, body: RejectRequest):
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
 
-    if run.pending_approval_type == "web_datasource_review":
-        run.approval_data = {
-            "approved": False,
-            "type": "web_datasource_review",
-            "reason": body.reason,
-            "selected_urls": body.selected_urls or [],
-        }
-    elif run.pending_approval_type == "python_review":
+    if run.pending_approval_type == "python_review":
         run.approval_data = {
             "approved": False,
             "type": "python_review",

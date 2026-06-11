@@ -28,6 +28,10 @@ function normalizeImpactLevelSpacing(markdown: string): string {
   )
 }
 
+function normalizeActionSpacing(markdown: string): string {
+  return markdown.replace(/\s*(\*\*Action:?\*\*)/gi, '  \n$1')
+}
+
 export type AIResponseProps = HTMLAttributes<HTMLDivElement> & {
   options?: Options
   children: Options['children']
@@ -181,7 +185,7 @@ export const AIResponse = memo(
   ({ className, options, children, ...props }: AIResponseProps) => {
     const markdown =
       typeof children === 'string'
-        ? normalizeImpactLevelSpacing(children)
+        ? normalizeActionSpacing(normalizeImpactLevelSpacing(children))
         : children
 
     return (

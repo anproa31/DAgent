@@ -1,4 +1,4 @@
-# data-analyst-agent — Local, Open-Source Data Analysis Assistant
+# DAgent — Local, Open-Source Data Analysis Assistant
 
 An agentic data-analysis assistant that runs entirely on your machine. Point it
 at your files and databases, ask questions in plain language, and it plans the
@@ -17,7 +17,6 @@ The system is a set of Docker services orchestrated by `docker compose`:
 | **app** | Core API: datasource registry, model list, analysis | 8173 | 8073 |
 | **agent-service** | ReAct agent: planning, execution, reflection, HITL, chat sessions, knowledge base, skills, memory | 8174 | 8074 |
 | **sandbox** | DuckDB-backed Python + SQL execution sandbox | internal | internal |
-| **context-engine** | Builds query-aware schema context for the agent | 8172 | internal |
 | **qdrant** | Vector store backing the memory system | 6333 | internal |
 | **redis** | Working-memory cache | 6379 | internal |
 
@@ -42,21 +41,22 @@ ETL.
 
 ### Backend services
 
-All API services use **FastAPI** + **Uvicorn**. Python **3.11** (`app`, `agent-service`, `sandbox`); **3.12** (`context-engine`).
+All API services use **FastAPI** + **Uvicorn**. Python **3.11** (`app`, `agent-service`, `sandbox`).
 
 | Service | Key libraries & tools |
 |---------|----------------------|
-| **app** | Pydantic, DuckDB, Pandas, OpenAI SDK (model listing) |
-| **agent-service** | LangGraph, LangChain, SQLAlchemy + Alembic + aiosqlite (session DB), Mem0, Qdrant client, Redis |
+| **app** | Pydantic, DuckDB, Pandas, OpenAI SDK (model listing), databao-context-engine (in-process semantic context) |
+| **agent-service** | LangGraph, LangChain, SQLAlchemy + Alembic + psycopg3 (Postgres session DB), Mem0, Qdrant client, Redis, databao-context-engine (query-aware search) |
 | **sandbox** | DuckDB, Pandas/NumPy, Matplotlib, Seaborn, SciPy, statsmodels, scikit-learn, sympy |
-| **context-engine** | Pydantic, httpx (schema context for the agent) |
 
 ### Agent & memory
 
-- **Orchestration**: LangGraph multi-agent workflow (ReAct planner, SQL/Python executor, reflection, HITL)
+- **Orchestration**: LangGraph orchestrator-worker pattern — user talks only to the **Orchestrator** (reason → plan → route → reflect); specialized agents handle scoped work
+- **Agent loop**: perceive → brain (plan) → act → observe, with guardrails (validate → scope → budget) on every action
+- **Specialized agents**: each worker defines **scope & instructions**, **knowledge** sources, and **tools** (`agents/shared/specialized_agent.py`)
 - **LLM**: OpenAI-compatible API (Ollama default; any compatible provider)
 - **Embeddings**: OpenAI-compatible endpoint (e.g. `nomic-embed-text` via Ollama)
-- **Memory**: 4-layer system — Qdrant (semantic/episodic vectors), Redis (working memory), Mem0, procedural defaults in SQLite
+- **Memory**: 4-layer system — Qdrant (semantic/episodic vectors), Redis (working memory), Mem0, procedural defaults in SQLite; top-k retrieval on every planner step
 
 ### Data & infrastructure
 
@@ -139,7 +139,7 @@ ollama pull qwen3:8b
 
 3. Pull the embedding model used by the memory system:
 ```bash
-ollama pull nomic-embed-text
+ollama pull nomic-embed-text-v2-moe
 ```
 
 After the models are downloaded, reload the browser and select the chat model

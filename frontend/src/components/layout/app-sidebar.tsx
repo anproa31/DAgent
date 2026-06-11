@@ -1,5 +1,6 @@
 import React from 'react'
 import { useSidebarData } from '@/hooks/use-sidebar-data'
+import { useTranslation } from '@/context/locale-context'
 import {
   Sidebar,
   SidebarContent,
@@ -12,13 +13,14 @@ import NewAnalysisBtn from './new-analysis-btn'
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { data: sidebarData, isLoading, error } = useSidebarData()
+  const { t } = useTranslation()
 
   if (isLoading || !sidebarData) {
     return (
       <Sidebar collapsible='icon' {...props}>
         <SidebarHeaderBar />
         <SidebarContent>
-          <div className='px-3 py-2'>Preparing...</div>
+          <div className='px-3 py-2'>{t('sidebar.preparing')}</div>
         </SidebarContent>
         <SidebarFooterActions />
         <SidebarRail />
@@ -31,7 +33,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <Sidebar collapsible='icon' {...props}>
         <SidebarHeaderBar />
         <SidebarContent>
-          <div className='px-3 py-2 text-red-500'>Failed to load.</div>
+          <div className='px-3 py-2 text-red-500'>{t('sidebar.failedToLoad')}</div>
         </SidebarContent>
         <SidebarFooterActions />
         <SidebarRail />

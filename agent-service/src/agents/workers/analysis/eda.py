@@ -1,0 +1,67 @@
+from agents.shared.observations import create_observation
+from agents.shared.state import AgentState
+from agents.shared.worker_context import build_worker_user_message, sanitize_eda_output
+from orchestration.streaming import make_delta_emitter
+from utils.agent_logger import get_logger
+from utils.llm_client import get_async_client, chat_complete
+from utils.prompts import EDA_AGENT_SYSTEM, format_semantic_context_for_prompt, format_language_rule
+
+logger = get_logger("eda_agent")
+
+
+async def eda_agent_node(state: AgentState) -> dict:
+    logger.info("enter")
+
+    data_summary = state.get("data_summary", "No data available")
+    schema = state.get("schema_info", "")
+    ctx = format_semantic_context_for_prompt(state.get("enhanced_context", ""))
+
+    client = get_async_client(state.get("base_url", ""), state.get("api_key", ""))
+    model = state.get("model", "")
+
+    system_prompt = EDA_AGENT_SYSTEM.format(
+        context=ctx,
+        schema=schema,
+        data_summary=data_summary,
+        language_rule=format_language_rule(state.get("language", "en")),
+    )
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": build_worker_user_message(state, "eda")},
+    ]
+
+    try:
+        raw_eda = await chat_complete(
+            client,
+            model,
+            messages,
+            temperature=0.3,
+            log_tag="eda_agent",
+            on_delta=make_delta_emitter(state.get("run_id", ""), "eda"),
+        )
+        eda_summary = sanitize_eda_output(raw_eda)
+        logger.info("exit success (%d chars)", len(eda_summary))
+        obs = create_observation(
+            agent_name="eda",
+            status="success",
+            summary=f"EDA completed: {eda_summary[:100]}...",
+            artifacts={"eda_summary": eda_summary},
+            error=None,
+        )
+    except Exception as e:
+        logger.error("LLM error: %s", e)
+        eda_summary = f"EDA analysis unavailable: {e}"
+        obs = create_observation(
+            agent_name="eda",
+            status="error",
+            summary=f"EDA failed: {e}",
+            artifacts={"eda_summary": ""},
+            error=str(e),
+        )
+
+    return {
+        "current_agent": "eda",
+        "eda_summary": eda_summary,
+        "agent_steps": state.get("agent_steps", []) + ["eda"],
+        "last_observation": obs,
+    }

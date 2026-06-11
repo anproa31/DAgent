@@ -25,6 +25,7 @@ class AgentState(TypedDict, total=False):
 
     # User inputs
     query: str
+    language: str  # ISO 639-1 code for user-facing responses (e.g. vi, en)
     tables: List[str]
     model: str
     base_url: str
@@ -67,13 +68,12 @@ class AgentState(TypedDict, total=False):
     sql_approved: bool
     sql_rejection_reason: str
 
-    # Web discover HITL
-    web_discover_proposal: Dict[str, Any]
-    web_discover_approved: bool
-    web_discover_rejection_reason: str
-
     # Python code for sandbox (used in execution_mode == "python")
     python_code: str
+    # Planner task signature of the last executed Python step. Lets a genuinely
+    # new Python computation regenerate + re-prompt (HITL), while a redundant
+    # re-route of the same task still short-circuits to the cached result.
+    executed_python_signature: str
 
     # Sandbox execution outputs
     data_summary: str
@@ -107,7 +107,11 @@ class AgentState(TypedDict, total=False):
     # Python HITL risk tier (solution.md §5)
     python_risk: str  # safe | medium | high
 
+    # Agent loop (anatomy diagram)
+    loop_phase: str  # perceive | brain | act | observe
+    run_budget: Dict[str, Any]  # {used, limit, exhausted}
+
     # Control
     done: bool
     error: str
-    completion_reason: str  # success | step_limit | hitl_timeout | user_cancelled
+    completion_reason: str  # success | step_limit | budget | hitl_timeout | user_cancelled

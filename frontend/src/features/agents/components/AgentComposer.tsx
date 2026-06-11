@@ -15,6 +15,7 @@ import {
   AIInputMultiSelectTable,
 } from '@/components/shared/kibo-ui/ai-input'
 import type { ModelInfo } from '@/hooks/use-analysis'
+import { useTranslation } from '@/context/locale-context'
 
 export interface SelectOption {
   value: string
@@ -63,6 +64,7 @@ export function AgentComposer({
   onSubmit,
   onStop,
 }: AgentComposerProps) {
+  const { t } = useTranslation()
   const [kbOpen, setKbOpen] = useState(false)
   const [skillsOpen, setSkillsOpen] = useState(false)
 
@@ -82,14 +84,14 @@ export function AgentComposer({
       <AIInputTextarea
         onChange={(e) => handleQueryChange(e.target.value)}
         value={query}
-        placeholder='Describe your analysis task — use @ for knowledge base, / for skills'
+        placeholder={t('composer.placeholder')}
         disabled={isRunning}
       />
       <AIInputToolbar>
         <AIInputTools>
           <AIInputModelSelect onValueChange={onModelChange} value={model}>
             <AIInputModelSelectTrigger>
-              <AIInputModelSelectValue placeholder='Select a model'>
+              <AIInputModelSelectValue placeholder={t('composer.selectModel')}>
                 {model && models.find((m) => m.id === model)?.name}
               </AIInputModelSelectValue>
             </AIInputModelSelectTrigger>
@@ -105,15 +107,15 @@ export function AgentComposer({
             options={tableOptions}
             selected={selectedTables}
             onSelectedChange={onSelectedTablesChange}
-            placeholder='Select tables'
+            placeholder={t('composer.selectTables')}
           />
           <AIInputMultiSelect
             options={kbOptions}
             selected={selectedKb}
             onSelectedChange={onSelectedKbChange}
             icon={<AtSign className='h-4 w-4' />}
-            noun='knowledge base'
-            searchPlaceholder='Search documents…'
+            noun={t('composer.knowledgeBase')}
+            searchPlaceholder={t('composer.searchDocuments')}
             open={kbOpen}
             onOpenChange={setKbOpen}
           />
@@ -122,8 +124,8 @@ export function AgentComposer({
             selected={selectedSkills}
             onSelectedChange={onSelectedSkillsChange}
             icon={<Slash className='h-4 w-4' />}
-            noun='skill'
-            searchPlaceholder='Search skills…'
+            noun={t('composer.skill')}
+            searchPlaceholder={t('composer.searchSkills')}
             open={skillsOpen}
             onOpenChange={setSkillsOpen}
           />

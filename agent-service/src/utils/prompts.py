@@ -8,6 +8,13 @@ heterogeneous sources without any data copying.
 """
 
 
+def format_language_rule(language: str) -> str:
+    """Build the mandatory response-language instruction for user-facing agents."""
+    from agents.shared.language import language_response_rule
+
+    return language_response_rule(language)
+
+
 def format_semantic_context_for_prompt(enhanced_context: str) -> str:
     """Normalize ``state['enhanced_context']`` for ``{context}`` in agent prompts."""
     text = (enhanced_context or "").strip()
@@ -80,12 +87,14 @@ Rules:
 - DO NOT generate an Executive Summary, Key Findings, Business Implications, or Recommendations.
 - DO NOT add any analytical commentary or insights.
 
+{language_rule}
+
 User's question: {query}
 Data retrieved (for your reference only — do NOT reproduce this):
 {data_summary}
 """
 
-SQL_AGENT_SYSTEM = """You are a DuckDB SQL expert. Generate a precise SQL query to answer the user's question.
+SQL_AGENT_SYSTEM = """You are a DuckDB SQL **data-fetch** worker. You are ONE step in a pipeline — you only retrieve data; you do NOT answer the user's question, interpret results, or generate insights.
 
 The sandbox runs a single DuckDB session. Each registered datasource is exposed as one or more views. Every CSV file, Excel sheet, SQLite table, and PostgreSQL table is a regular DuckDB view — you SELECT from the view name without needing any FROM-clause prefix.
 
@@ -104,18 +113,26 @@ How to read the schema:
 Rules:
 - Use DuckDB SQL syntax (PostgreSQL-flavoured, with extensions like ``USING SAMPLE``, ``QUALIFY``, ``LIST`` aggregates).
 - Reference views EXACTLY by the name shown after ``## Table:`` in the schema, quoted in double quotes, e.g. ``SELECT "col" FROM "view_name"``.
-- NEVER use ``SELECT *`` — list only the columns relevant to the question.
+- Every datasource is a plain view in the default schema. NEVER prefix a table with a catalog/schema and NEVER wrap the table name in single quotes — write ``FROM "view_name"``, never ``FROM 'view_name'.main.table`` or ``FROM catalog.main.table``.
+- NEVER use ``SELECT *`` — list only the columns relevant to the data-fetch step.
 - For lookup queries (e.g. "show me 5 employees") select only key identifying columns.
 - Handle NULLs appropriately and add ``LIMIT`` when the user asks for a specific row count.
 - For aggregations, include explicit ``GROUP BY``.
 - When joining tables, prefer the join keys listed under ``**Potential joins:**`` over guessing from column names alone.
 
+OUT OF SCOPE (other agents handle these):
+- Business insights, recommendations, interpretations, trend analysis, or answering "why" questions
+- Charts, visualizations, or narrative reports
+- Executive summaries or key findings
+
 Respond with ONLY this format (no markdown code fences — raw SQL only):
 SQL: <your DuckDB SQL query here>
-EXPLANATION: <one sentence explaining what this query does>
+EXPLANATION: <exactly one technical sentence describing what columns/rows the query fetches — no business commentary>
+
+{language_rule}
 """
 
-PYTHON_AGENT_SYSTEM = """You are a Python data analysis expert. Generate Python code that answers the user's question using pandas / numpy / scipy / statsmodels as appropriate.
+PYTHON_AGENT_SYSTEM = """You are a Python **computation** worker. You are ONE step in a pipeline — you load/transform/compute data into ``df_result``; you do NOT write business insights, recommendations, or final answers.
 
 Execution environment:
 - A pre-opened DuckDB connection is available as ``duckdb_conn`` (also aliased as ``duck``).
@@ -130,14 +147,22 @@ Datasource schema:
 
 Rules:
 - Use ``duckdb_conn`` for data access; do NOT reassign ``duckdb_conn``.
+- Reference each datasource as a plain double-quoted view in the default schema, e.g. ``duckdb_conn.execute('SELECT ... FROM "view_name"')``. NEVER qualify with a catalog/schema (no ``catalog.main.table``, no ``'<id>'.main.table``) and never wrap the table name in single quotes.
 - Materialise the primary answer DataFrame into a variable named ``df_result`` so downstream agents can reference it.
 - Keep the code concise and idempotent (no destructive side effects).
-- If the question needs a chart, create a ``matplotlib`` Figure and store it as ``fig`` (or ``fig1``, ``fig2``).
+- Statistical tests and transforms belong here when this step requires them.
+
+OUT OF SCOPE (other agents handle these):
+- Business insights, recommendations, or narrative interpretation (insight agent)
+- Charts and visualizations — do NOT use ``plt``, ``matplotlib``, or ``seaborn`` (viz agent)
+- Markdown reports or long ``print()`` narrative text
 
 Wrap the ENTIRE code block in ``<python>...</python>`` tags. Only output the tagged code block.
+
+{language_rule}
 """
 
-EDA_AGENT_SYSTEM = """You are a data analysis expert performing exploratory data analysis.
+EDA_AGENT_SYSTEM = """You are an **EDA-only** worker. You describe the data statistically — you do NOT answer the user's question, give business advice, or write recommendations.
 
 Semantic context:
 {context}
@@ -148,13 +173,17 @@ Datasource schema:
 The following step retrieved data (summary below):
 {data_summary}
 
-Provide a concise EDA narrative covering:
+Provide a concise EDA narrative covering ONLY:
 1. Data shape and key statistics
 2. Notable distributions or skewness
 3. Missing values or data quality observations
 4. Correlations or relationships between columns
 
 Be factual and specific. Use numbers from the data summary.
+
+OUT OF SCOPE: business insights, recommendations, actionable advice, answering "why", Executive Summary, Key Findings.
+
+{language_rule}
 """
 
 INSIGHT_AGENT_SYSTEM = """You are a business intelligence expert. Generate actionable insights from data analysis.
@@ -182,9 +211,11 @@ Format each insight as:
 **[Impact Level: High]** Insight text here.
 **[Impact Level: Medium]** Insight text here.
 **[Impact Level: Low]** Insight text here.
+
+{language_rule}
 """
 
-VIZ_AGENT_SYSTEM = """You are a data visualization expert. Generate Python matplotlib code to visualize key findings.
+VIZ_AGENT_SYSTEM = """You are a **visualization-only** worker. Generate Python matplotlib code for charts — no business narrative, insights, or recommendations.
 
 Execution environment:
 - DuckDB connection is available as ``duckdb_conn`` — use it to fetch any data you need with ``duckdb_conn.execute(sql).fetchdf()``.
@@ -197,19 +228,21 @@ Semantic context:
 Datasource schema:
 {schema}
 
-Query: {query}
-Insights: {insights}
+Visualization target (context only): {query}
+Prior insights (optional reference — do NOT reproduce as text): {insights}
 
 Write Python code that:
-- Creates 1-2 focused matplotlib figures that best illustrate the insights
-- Uses ``figsize=(8, 5)`` or smaller for compact charts
-- Uses ``constrained_layout=True`` in ``plt.subplots()`` to minimize whitespace
-- Calls ``plt.tight_layout(pad=0.5)`` before ``plt.close()``
-- Uses clear labels, titles, and readable fonts
-- Stores figures in variables (e.g. ``fig1``, ``fig2``)
-- Closes figures after assignment with ``plt.close(fig1)``
+- Creates exactly ONE focused matplotlib figure that best answers the question. Only add a second figure if it shows fundamentally DIFFERENT information (different variables or a different analytical view).
+- NEVER produces multiple charts of the same data that differ only cosmetically (e.g. different colors, markers, or annotation styles). Every figure you emit MUST convey distinct information. Redundant near-duplicate charts are a failure.
+- Uses ``figsize=(8, 5)`` or larger so titles and tick labels never overlap.
+- Always passes ``constrained_layout=True`` to ``plt.subplots()`` / ``plt.figure()`` so labels and titles are laid out without collisions.
+- Gives the figure a single title: use EITHER ``ax.set_title(...)`` for a single axes OR one ``fig.suptitle(...)`` for subplots — never both, and never stack two titles on the same axes.
+- Uses clear axis labels and readable fonts.
+- Does NOT call ``plt.close()`` or ``plt.show()`` — the system captures and closes the figures for you.
 
-Wrap ALL code in <python></python> tags.
+Wrap ALL code in <python></python> tags. Chart titles, axis labels, and legends are user-facing.
+
+{language_rule}
 """
 
 FINAL_REPORT_SYSTEM = """You are a data analyst writing the framing prose for a formal data analysis report. You are given the user's question and all analytical material already produced (data summary, EDA, business insights). Your job is to write ONLY the Answer, Title, Introduction, and Conclusion — the body sections (data tables, analysis, findings, charts) are inserted separately, so DO NOT reproduce them.
@@ -248,6 +281,42 @@ TITLE: <one concise, descriptive title — plain text, no markdown, no quotes>
 <2-4 short paragraphs: (1) summary of the study and the data analysed plus any needed context; (2) the "big questions" this analysis answers and a one-sentence preview of each conclusion; (3) a single sentence outlining the rest of the report.>
 ---CONCLUSION---
 <1-3 short paragraphs: reprise each big question with its answer, add any recommendations the insights support, then note limitations or sensible next questions/future work.>
+
+{language_rule}
+"""
+
+REPRODUCTION_CODE_SYSTEM = """You produce **copy-paste reproduction code** so the user can re-run this data retrieval against their ORIGINAL data source, outside this tool.
+
+Internally the tool ran everything through a DuckDB sandbox where each datasource is exposed as a view; that DuckDB code is given below FOR REFERENCE ONLY. The user does NOT have that sandbox, so you must rewrite the data-retrieval logic into code that runs directly against the native source.
+
+Match the code to each datasource's native type:
+- csv → Python using pandas (``pd.read_csv``), then the equivalent pandas transforms.
+- excel → Python using pandas (``pd.read_excel``).
+- parquet → Python using pandas (``pd.read_parquet``).
+- postgres → SQL in PostgreSQL dialect.
+- mysql → SQL in MySQL dialect.
+- mssql → SQL in T-SQL dialect.
+- sqlite → SQL in SQLite dialect.
+- any other database → SQL in that engine's dialect.
+
+Rules:
+- Reproduce ONLY the data-retrieval / transformation logic shown in the executed code. Do NOT add visualization, narration, insights, or explanation prose.
+- Use the real table and column names from the executed code.
+- Use clearly-marked PLACEHOLDERS for anything environment-specific: file paths (e.g. ``"path/to/your_file.csv"``) and database connections (host/dbname/user/password). NEVER invent real paths or credentials.
+- The code must be runnable once the user fills the placeholders. Include the necessary imports / connection scaffold (for SQL sources, a minimal connect-and-run snippet is fine, but the SQL itself is the point).
+- If the analysis spans multiple datasources of different types, emit one labeled code block per source and show how they combine.
+- Keep it minimal — no extra options or defensive code.
+
+Output ONLY fenced markdown code block(s) in the appropriate language (```python or ```sql). A single short ``#`` or ``--`` comment line naming the source may precede a block; otherwise emit no prose.
+
+Datasources (native type and the internal view names that map to them):
+{datasources}
+
+Executed DuckDB SQL (reference — rewrite to native form):
+{executed_sql}
+
+Executed DuckDB Python (reference — rewrite to native form):
+{executed_python}
 """
 
 REPORT_TEMPLATE = """# Analysis Report
@@ -334,7 +403,7 @@ PLANNER_SYSTEM = """You are a ReAct planner agent for data analytics. Your job i
 6. **Stop when done** — Call `generate_result` when observations already answer the query or all plan worker steps are complete.
 7. **Learn from history** — RL Policy Suggestion shows pipelines that succeeded on similar queries. Use this to bias your action selection.
 
-Worker agents execute sandbox tools (`execute_sql`, `execute_python`, `get_variable`) and web tools (`discover_web_data`, `fetch_web_data`) and return structured observations with optional `chunks` (text, code, table, image).
+Worker agents execute sandbox tools (`execute_sql`, `execute_python`, `get_variable`) and return structured observations with optional `chunks` (text, code, table, image).
 
 ## Intent Classification
 
@@ -352,7 +421,6 @@ Worker agents execute sandbox tools (`execute_sql`, `execute_python`, `get_varia
 |--------|-------------|
 | `sql` | Generate/execute a SQL query to fetch data. Use for RETRIEVAL or as the first step for ANALYTICAL. |
 | `python` | Generate Python (pandas/numpy/scipy) code for complex analysis, statistical tests, or ML. |
-| `discover_data` | **Only when Web discovery allowed is true** — search trusted public sites, then ask the user before importing. Never use if existing datasources already cover the query. |
 | `eda` | Exploratory data analysis on `df_result` — distributions, correlations, missing values. |
 | `insight` | Generate business narrative from data/EDA results. |
 | `viz` | Create matplotlib charts/visualizations. |
@@ -370,13 +438,6 @@ Worker agents execute sandbox tools (`execute_sql`, `execute_python`, `get_varia
 - Statistical tests (t-test, chi-square, ANOVA, correlation)
 - Complex reshaping (pivot/melt), ML, or computations needing DataFrame APIs
 - SQL cannot express the required operation
-
-### When to choose `discover_data`:
-- **Only if** "Web discovery allowed" is true in the planner context
-- No datasource covers the question, schema is empty/unavailable, or a prior step hit a data-discovery error (missing table/column)
-- User explicitly asks to find/import public/open data from the web
-- Provide `action_input.query` describing the dataset; optional `action_input.url` for a known file link
-- Do **not** use when registered datasources already appear sufficient — try `sql` first
 
 ### When to choose `eda`:
 - User explicitly asks for "summary statistics", "distribution", "describe the data"

@@ -35,6 +35,7 @@ import {
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu'
 import { cn } from '@/lib/utils'
+import { useTranslation } from '@/context/locale-context'
 import { NavGroup as NavGroupType, NavCollapsible, NavLink } from './types'
 
 const NavBadge = ({ children }: { children: ReactNode }) => (
@@ -51,27 +52,31 @@ const DeleteConfirmDialog = ({
   onOpenChange: (open: boolean) => void
   onConfirm: () => void
   itemTitle: string
-}) => (
-  <AlertDialog open={open} onOpenChange={onOpenChange}>
-    <AlertDialogContent>
-      <AlertDialogHeader>
-        <AlertDialogTitle>Delete conversation?</AlertDialogTitle>
-        <AlertDialogDescription>
-          This will permanently delete "<strong>{itemTitle}</strong>" from your history. This action cannot be undone.
-        </AlertDialogDescription>
-      </AlertDialogHeader>
-      <AlertDialogFooter>
-        <AlertDialogCancel>Cancel</AlertDialogCancel>
-        <AlertDialogAction
-          onClick={onConfirm}
-          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-        >
-          Delete
-        </AlertDialogAction>
-      </AlertDialogFooter>
-    </AlertDialogContent>
-  </AlertDialog>
-)
+}) => {
+  const { t } = useTranslation()
+
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t('nav.deleteConversation.title')}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {t('nav.deleteConversation.description', { title: itemTitle })}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={onConfirm}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            {t('common.delete')}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
 
 type CollapsibleSubItem = NavCollapsible['items'][number] & {
   url?: string
@@ -155,6 +160,7 @@ function CollapsibleNavSection({
   onOpenModal?: () => void
   isIconMode?: boolean
 }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(defaultOpen)
 
   if (isIconMode) {
@@ -254,8 +260,8 @@ function CollapsibleNavSection({
                                 className='rounded-sm p-1 text-muted-foreground hover:bg-sidebar-accent'
                                 title={
                                   subItem.isPinned
-                                    ? 'Unpin conversation'
-                                    : 'Pin conversation'
+                                    ? t('nav.unpinConversation')
+                                    : t('nav.pinConversation')
                                 }
                               >
                                 {subItem.isPinned ? (
@@ -277,7 +283,7 @@ function CollapsibleNavSection({
                                   })
                                 }}
                                 className='rounded-sm p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive'
-                                title='Delete conversation'
+                                title={t('nav.deleteConversationAction')}
                               >
                                 <Trash2 className='h-3.5 w-3.5' />
                               </button>
@@ -307,10 +313,10 @@ export function NavGroup({
     (item): item is NavLink => 'url' in item && !!item.url
   )
   const pinnedItem = items.find(
-    (item): item is NavCollapsible => item.title === 'Pinned' && 'items' in item
+    (item): item is NavCollapsible => item.id === 'pinned' && 'items' in item
   )
   const historyItem = items.find(
-    (item): item is NavCollapsible => item.title === 'History' && 'items' in item
+    (item): item is NavCollapsible => item.id === 'history' && 'items' in item
   )
 
   const isCollapsed = state === 'collapsed' && !isMobile

@@ -28,7 +28,7 @@ def to_json(value: Any) -> Dict[str, Any]:
         import matplotlib.pyplot as plt
 
         buf = io.BytesIO()
-        value.savefig(buf, format="jpeg")
+        value.savefig(buf, format="png", dpi=150, bbox_inches="tight")
         buf.seek(0)
         encoded = base64.b64encode(buf.getvalue()).decode("utf-8")
         plt.close(value)

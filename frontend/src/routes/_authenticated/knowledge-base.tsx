@@ -10,6 +10,7 @@ import {
 } from '@/hooks/use-memory'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { useTranslation } from '@/context/locale-context'
 
 export const Route = createFileRoute('/_authenticated/knowledge-base')({
   component: KnowledgeBasePage,
@@ -24,6 +25,7 @@ const ACCEPT = {
 }
 
 function KnowledgeBasePage() {
+  const { t } = useTranslation()
   const { data: documents = [], isLoading } = useKbDocuments()
   const upload = useUploadKbDocument()
   const remove = useDeleteKbDocument()
@@ -33,28 +35,31 @@ function KnowledgeBasePage() {
       for (const file of files) {
         try {
           const res = await upload.mutateAsync(file)
-          toast.success(`${res.filename} — ${res.chunks_stored} chunks stored`)
+          toast.success(
+            t('kb.uploadSuccess', {
+              filename: res.filename,
+              chunks: res.chunks_stored,
+            })
+          )
         } catch (e: unknown) {
           const detail =
             (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
-            'Upload failed'
+            t('kb.uploadFailed')
           toast.error(detail)
         }
       }
     },
-    [upload]
+    [upload, t]
   )
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ accept: ACCEPT, onDrop })
 
   return (
     <div className="container mx-auto max-w-3xl p-6">
-      <h1 className="text-2xl font-bold">Knowledge Base</h1>
-      <p className="mt-1 text-muted-foreground">
-        Upload documents your agent can reference during analysis.
-      </p>
+      <h1 className="text-2xl font-bold">{t('kb.title')}</h1>
+      <p className="mt-1 text-muted-foreground">{t('kb.subtitle')}</p>
       <p className="mt-1 text-sm text-muted-foreground">
-        <strong>Supported:</strong> PDF, DOCX, TXT, CSV, Markdown
+        <strong>{t('kb.supported')}</strong> PDF, DOCX, TXT, CSV, Markdown
       </p>
 
       <div
@@ -68,18 +73,18 @@ function KnowledgeBasePage() {
         <IconUpload className="h-6 w-6 text-muted-foreground" />
         <span className="text-sm text-muted-foreground">
           {upload.isPending
-            ? 'Uploading…'
+            ? t('kb.uploading')
             : isDragActive
-              ? 'Drop files here'
-              : 'Drag & drop files here, or click to browse'}
+              ? t('kb.dropHere')
+              : t('kb.dragDrop')}
         </span>
       </div>
 
-      <h2 className="mt-8 mb-3 text-lg font-semibold">Uploaded Documents</h2>
+      <h2 className="mt-8 mb-3 text-lg font-semibold">{t('kb.uploadedDocs')}</h2>
       {isLoading ? (
-        <p className="text-muted-foreground">Loading…</p>
+        <p className="text-muted-foreground">{t('common.loading')}</p>
       ) : documents.length === 0 ? (
-        <p className="text-muted-foreground">No documents uploaded yet.</p>
+        <p className="text-muted-foreground">{t('kb.empty')}</p>
       ) : (
         <ul className="divide-y rounded-lg border">
           {documents.map((doc) => (
@@ -93,7 +98,7 @@ function KnowledgeBasePage() {
                 size="icon"
                 className="h-7 w-7 text-muted-foreground hover:text-destructive"
                 disabled={remove.isPending}
-                title="Delete document"
+                title={t('kb.deleteDoc')}
                 onClick={() => remove.mutate(doc)}
               >
                 <IconTrash className="h-4 w-4" />

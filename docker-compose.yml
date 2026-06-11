@@ -1,12 +1,6 @@
 name: daa-prod
 
 services:
-  context-engine:
-    build: ./context-engine
-    container_name: daa_prod_context_engine
-    networks:
-      - app_network
-
   qdrant:
     image: qdrant/qdrant:latest
     container_name: daa_prod_qdrant
@@ -20,6 +14,23 @@ services:
     container_name: daa_prod_redis
     networks:
       - app_network
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: daa_prod_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-daa}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-daa}
+      POSTGRES_DB: ${POSTGRES_DB:-daa_agent}
+    volumes:
+      - agent_pg_data:/var/lib/postgresql/data
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-daa} -d ${POSTGRES_DB:-daa_agent}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   sandbox:
     build: ./sandbox
@@ -46,12 +57,14 @@ services:
     environment:
       CODE_RUNNER_URL: ${CODE_RUNNER_URL:-http://sandbox:8001/}
       DATASOURCE_ROOT: /data/datasources
-      CONTEXT_ENGINE_URL: ${CONTEXT_ENGINE_URL:-http://context-engine:8002/}
+      DCE_DOMAIN_DIR: ${DCE_DOMAIN_DIR:-/data/datasources/dce_domain}
+      DCE_OLLAMA_HOST: ${DCE_OLLAMA_HOST:-host.docker.internal}
+      DCE_OLLAMA_PORT: ${DCE_OLLAMA_PORT:-11434}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text-v2-moe}
     networks:
       - app_network
     depends_on:
       - sandbox
-      - context-engine
     volumes:
       - ./app/src:/usr/src/app/src
       - datasource_data:/data
@@ -68,22 +81,32 @@ services:
     environment:
       CODE_RUNNER_URL: ${CODE_RUNNER_URL:-http://sandbox:8001/}
       APP_SERVICE_URL: ${APP_SERVICE_URL:-http://app:8000}
-      CONTEXT_ENGINE_URL: ${CONTEXT_ENGINE_URL:-http://context-engine:8002/}
+      DATASOURCE_ROOT: /data/datasources
+      DCE_DOMAIN_DIR: ${DCE_DOMAIN_DIR:-/data/datasources/dce_domain}
+      DCE_OLLAMA_HOST: ${DCE_OLLAMA_HOST:-host.docker.internal}
+      DCE_OLLAMA_PORT: ${DCE_OLLAMA_PORT:-11434}
       QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://host.docker.internal:11434/v1}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text-v2-moe}
       MEMORY_USER_ID: ${MEMORY_USER_ID:-default}
-    volumes:
-      - agent_service_data:/usr/src/app/data
+      # Chat/run persistence in Postgres (schema auto-created on boot; alembic for versioned migrations)
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://daa:daa@postgres:5432/daa_agent}
     networks:
       - app_network
     depends_on:
-      - app
-      - sandbox
-      - context-engine
-      - qdrant
-      - redis
+      postgres:
+        condition: service_healthy
+      app:
+        condition: service_started
+      sandbox:
+        condition: service_started
+      qdrant:
+        condition: service_started
+      redis:
+        condition: service_started
+    volumes:
+      - datasource_data:/data
 
   frontend:
     build:
@@ -108,9 +131,9 @@ volumes:
   # Shared volume used by both ``app`` (registry + uploads) and ``sandbox`` (DuckDB).
   datasource_data:
     name: prod_datasource_data
-  # SQLite DB for agent chat session history.
-  agent_service_data:
-    name: prod_agent_data
+  # Postgres data for agent chat/run session history.
+  agent_pg_data:
+    name: prod_agent_pg_data
   # Qdrant vector store for the memory system (semantic / episodic / procedural).
   qdrant_data:
     name: prod_qdrant_data

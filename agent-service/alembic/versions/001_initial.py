@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 revision = "001_initial"
@@ -22,8 +23,8 @@ def upgrade() -> None:
         "agent_sessions",
         sa.Column("id", sa.String(length=36), nullable=False),
         sa.Column("title", sa.String(length=512), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("(CURRENT_TIMESTAMP)"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("(CURRENT_TIMESTAMP)"), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -40,9 +41,9 @@ def upgrade() -> None:
         sa.Column("sql_approved", sa.Boolean(), nullable=False),
         sa.Column("pending_approval", sa.Boolean(), nullable=False),
         sa.Column("insights", sa.Text(), nullable=True),
-        sa.Column("report_content", sa.JSON(), nullable=True),
-        sa.Column("agent_steps", sa.JSON(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("(CURRENT_TIMESTAMP)"), nullable=False),
+        sa.Column("report_content", postgresql.JSONB(), nullable=True),
+        sa.Column("agent_steps", postgresql.JSONB(), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.ForeignKeyConstraint(["session_id"], ["agent_sessions.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("run_id"),
     )

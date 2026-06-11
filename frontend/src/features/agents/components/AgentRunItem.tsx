@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { Pencil, Check, X, Brain, Code2, Play, ChevronRight, Loader2 } from 'lucide-react'
+import { Pencil, Check, X, Code2, Play, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
-import { WorkflowStepTracker, deriveVisibleSteps } from '@/components/agents/WorkflowStepTracker'
+import { ThinkingCollapsible } from '@/components/agents/ThinkingCollapsible'
 import { AnswerBlock, StreamingAnswerBlock } from '@/components/agents/MessageStream'
 import { ReportContent } from '@/features/analysis-report/components/report-content'
 import type { SidePanelContent } from '@/features/analysis-report/components/side-panel'
@@ -38,13 +38,7 @@ export function AgentRunItem({
   const [isEditing, setIsEditing] = useState(false)
   const [editValue, setEditValue] = useState(run.query)
 
-  const visibleSteps = deriveVisibleSteps(run.currentAgent, run.agentSteps, run.phase)
-
-  const showThinkingCard = isActive || run.thinkingSegments.length > 0
-  const lastSegment = run.thinkingSegments[run.thinkingSegments.length - 1]
-  const thinkingPreview = lastSegment
-    ? lastSegment.text.replace(/\s+/g, ' ').trim().slice(0, 90)
-    : ''
+  const showThinking = isActive
 
   const answerStatus = showReport
     ? ('done' as const)
@@ -141,37 +135,16 @@ export function AgentRunItem({
         )}
       </div>
 
-      {isActive && visibleSteps.length > 0 && (
-        <WorkflowStepTracker steps={visibleSteps} className='mb-4' />
+      {showThinking && (
+        <ThinkingCollapsible
+          segments={run.thinkingSegments}
+          isActive={isActive}
+          className='mb-4'
+        />
       )}
 
-      {(showThinkingCard || run.executions.length > 0) && (
+      {run.executions.length > 0 && (
         <div className='mb-4 space-y-2'>
-          {showThinkingCard && (
-            <button
-              type='button'
-              onClick={() => onShowSidePanel({ type: 'thinking', runId: run.runId })}
-              className='group border-border/50 hover:border-border hover:bg-accent/50 flex w-full cursor-pointer items-center justify-between rounded-lg border p-3 text-left transition-all duration-200'
-            >
-              <div className='flex min-w-0 flex-1 items-center gap-3'>
-                <div className='bg-primary/10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full'>
-                  <Brain className='text-primary h-4 w-4' />
-                </div>
-                <div className='min-w-0 flex-1'>
-                  <p className='text-foreground text-sm font-medium'>Thinking</p>
-                  <p className='text-muted-foreground truncate text-xs'>
-                    {thinkingPreview || 'View the model’s reasoning'}
-                  </p>
-                </div>
-              </div>
-              {isActive ? (
-                <Loader2 className='text-primary h-4 w-4 shrink-0 animate-spin' />
-              ) : (
-                <ChevronRight className='text-muted-foreground h-4 w-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100' />
-              )}
-            </button>
-          )}
-
           {run.executions.map((ex) => {
             const Icon = ex.kind === 'sql' ? Code2 : Play
             const label = ex.kind === 'sql' ? 'SQL execution' : 'Python execution'

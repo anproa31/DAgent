@@ -25,6 +25,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { DatabaseConnectionModal } from '@/features/datasources/components/database-connection-modal'
+import { useTranslation } from '@/context/locale-context'
 
 const DatasourceTypeIcon = ({ type }: { type: DatasourceType }) => {
   if (type === 'csv') {
@@ -40,6 +41,7 @@ const DatasourceTypeIcon = ({ type }: { type: DatasourceType }) => {
 }
 
 const DatasourceCard = ({ table }: { table: TableInfo }) => {
+  const { t } = useTranslation()
   const deleteMutation = useDeleteDatasource()
   const label = DATASOURCE_TYPE_LABELS[table.datasourceType] ?? table.datasourceType
 
@@ -67,26 +69,28 @@ const DatasourceCard = ({ table }: { table: TableInfo }) => {
                 size="icon"
                 className="h-7 w-7 text-muted-foreground hover:text-destructive"
                 disabled={deleteMutation.isPending}
-                title="Remove datasource"
+                title={t('datasources.removeAction')}
               >
                 <IconTrash className="h-4 w-4" />
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Remove datasource?</AlertDialogTitle>
+                <AlertDialogTitle>{t('datasources.removeTitle')}</AlertDialogTitle>
                 <AlertDialogDescription>
-                  <strong>{table.datasourceName}</strong> ({label}) will be
-                  deregistered. This action cannot be undone.
+                  {t('datasources.removeDescription', {
+                    name: table.datasourceName,
+                    type: label,
+                  })}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
                 <AlertDialogAction
                   onClick={handleDelete}
                   className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 >
-                  Remove
+                  {t('common.remove')}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
@@ -102,13 +106,14 @@ export const Route = createFileRoute('/_authenticated/datasources')({
 })
 
 function DatasourcesPage() {
+  const { t } = useTranslation()
   const { data: tables, isLoading, error } = useTableList()
   const [modalOpen, setModalOpen] = useState(false)
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div>Loading datasources...</div>
+        <div>{t('datasources.loading')}</div>
       </div>
     )
   }
@@ -116,12 +121,12 @@ function DatasourcesPage() {
   if (error || !tables) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4">
-        <div className="text-red-500">Failed to load datasources.</div>
+        <div className="text-red-500">{t('datasources.failed')}</div>
         <button
           onClick={() => setModalOpen(true)}
           className="px-4 py-2 bg-primary text-primary-foreground rounded-md"
         >
-          Add Datasource
+          {t('datasources.add')}
         </button>
       </div>
     )
@@ -131,25 +136,25 @@ function DatasourcesPage() {
     <>
       <div className="container mx-auto p-6">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold">Datasources</h1>
+          <h1 className="text-2xl font-bold">{t('datasources.title')}</h1>
           <button
             onClick={() => setModalOpen(true)}
             className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
           >
             <IconPlus className="h-4 w-4" />
-            New Datasource
+            {t('datasources.new')}
           </button>
         </div>
 
         {tables.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-muted-foreground mb-4">No datasources connected yet.</p>
+            <p className="text-muted-foreground mb-4">{t('datasources.empty')}</p>
             <button
               onClick={() => setModalOpen(true)}
               className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 mx-auto"
             >
               <IconPlus className="h-4 w-4" />
-              Add Datasource
+              {t('datasources.add')}
             </button>
           </div>
         ) : (

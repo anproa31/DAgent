@@ -1,7 +1,7 @@
 fastapi==0.115.12
 uvicorn[standard]==0.34.2
 httpx==0.28.1
-pydantic==2.11.4
+pydantic>=2.12.4,<3
 openai>=2.26.0,<3
 langgraph>=1.0.2
 langchain>=1.0.3
@@ -10,7 +10,7 @@ langchain-openai>=1.0.1
 agent-patterns==0.2.4
 python-dotenv>=1.2.1
 sqlalchemy[asyncio]==2.0.40
-aiosqlite==0.21.0
+psycopg[binary]>=3.2
 alembic==1.15.2
 # --- Memory system (memory.md) ---
 qdrant-client>=1.12
@@ -21,3 +21,7 @@ pypdf>=5.0
 docx2txt>=0.8
 python-multipart>=0.0.9
 pandas>=2.2
+lingua-language-detector>=2.0.2
+
+# Semantic context search (in-process, replaces context-engine /enhance)
+databao-context-engine>=0.7.0,<0.8

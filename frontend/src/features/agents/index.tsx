@@ -8,7 +8,6 @@ import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { SQLApprovalModal } from '@/components/agents/SQLApprovalModal'
 import { PythonApprovalModal } from '@/components/agents/PythonApprovalModal'
-import { WebDatasourceApprovalModal } from '@/components/agents/WebDatasourceApprovalModal'
 import { SidePanel, type SidePanelContent } from '@/features/analysis-report/components/side-panel'
 import { toast } from 'sonner'
 import {
@@ -27,10 +26,12 @@ import { AgentRunItem } from '@/features/agents/components/AgentRunItem'
 import { AgentComposer } from '@/features/agents/components/AgentComposer'
 import { useAgentSessionLoader } from '@/features/agents/hooks/use-agent-session-loader'
 import { useAgentStreamHandlers } from '@/features/agents/hooks/use-agent-stream-handlers'
+import { useTranslation } from '@/context/locale-context'
 
 const agentsRouteApi = getRouteApi('/_authenticated/agents')
 
 export default function AgentsPage() {
+  const { t } = useTranslation()
   const { baseUrl, apiKey, embeddingBaseUrl, embeddingModel } = useSettings()
   const { data: tables } = useTableList()
   const { data: modelData } = useModelListByMode(false)
@@ -44,6 +45,7 @@ export default function AgentsPage() {
     replaceAgentHistorySession,
     updateHistoryTitle,
     refreshAgentSessionsFromServer,
+    removeFromHistory,
   } = useSharedAnalysisHistory()
 
   const [query, setQuery] = useState('')
@@ -193,7 +195,7 @@ export default function AgentsPage() {
       const trimmed = rawQuery.trim()
       if (!trimmed) return
       if (!tables?.length) {
-        toast.error('Connect at least one table first.')
+        toast.error(t('agents.connectTableFirst'))
         return
       }
 
@@ -202,22 +204,40 @@ export default function AgentsPage() {
       setSubmitStatus('submitted')
 
       try {
+        // Session identity is driven by the URL, not the in-memory store: a prompt sent from
+        // the landing / new-chat view (no ?session=) always starts a fresh session, while a
+        // prompt sent inside an open session continues it as a follow-up. The edit-fork path
+        // (replaceHistorySessionId) always forks a new session.
+        const viewingSessionId = opts?.replaceHistorySessionId
+          ? ''
+          : sessionFromUrl ?? ''
+
         let currentSessionId: string
         let createdNewSession = false
 
-        if (opts?.replaceHistorySessionId) {
+        if (viewingSessionId) {
+          currentSessionId = viewingSessionId
+        } else {
           const sessionRes = await createSession()
           currentSessionId = sessionRes.session_id
           setSessionId(currentSessionId)
           createdNewSession = true
-        } else {
-          currentSessionId = sessionId ?? ''
-          if (!currentSessionId) {
-            const sessionRes = await createSession()
-            currentSessionId = sessionRes.session_id
-            setSessionId(currentSessionId)
-            createdNewSession = true
+        }
+
+        // Surface the new conversation in the sidebar at submit time (before the run starts),
+        // so it no longer appears only after the final answer.
+        if (createdNewSession) {
+          setSidePanelContent(null)
+          if (opts?.replaceHistorySessionId) {
+            replaceAgentHistorySession(
+              opts.replaceHistorySessionId,
+              currentSessionId,
+              trimmed
+            )
+          } else {
+            addToHistory(currentSessionId, trimmed, 'agent')
           }
+          scheduleSessionTitleUpdate(currentSessionId, trimmed)
         }
 
         const { run_id, error: startError } = await startRun(currentSessionId, {
@@ -233,27 +253,14 @@ export default function AgentsPage() {
         })
 
         if (startError || !run_id) {
-          toast.error(startError || 'Failed to start run')
+          toast.error(startError || t('agents.failedStartRun'))
+          if (createdNewSession) removeFromHistory(currentSessionId)
           setSubmitStatus('ready')
           return
         }
 
         setSessionTables(currentSessionId, selectedTables)
         addRun(run_id, currentSessionId, trimmed)
-
-        if (createdNewSession) {
-          setSidePanelContent(null)
-          if (opts?.replaceHistorySessionId) {
-            replaceAgentHistorySession(
-              opts.replaceHistorySessionId,
-              currentSessionId,
-              trimmed
-            )
-          } else {
-            addToHistory(currentSessionId, trimmed, 'agent')
-          }
-          scheduleSessionTitleUpdate(currentSessionId, trimmed)
-        }
 
         if (!sessionFromUrl || sessionFromUrl !== currentSessionId) {
           navigate({ to: '/agents', search: { session: currentSessionId } })
@@ -274,13 +281,12 @@ export default function AgentsPage() {
           })
         )
       } catch {
-        toast.error('Failed to start analysis')
+        toast.error(t('agents.failedStartAnalysis'))
         setSubmitStatus('ready')
       }
     },
     [
       tables,
-      sessionId,
       selectedTables,
       selectedKb,
       selectedSkills,
@@ -294,6 +300,7 @@ export default function AgentsPage() {
       navigate,
       addToHistory,
       replaceAgentHistorySession,
+      removeFromHistory,
       updateHistoryTitle,
       refreshAgentSessionsFromServer,
       scheduleSessionTitleUpdate,
@@ -349,7 +356,7 @@ export default function AgentsPage() {
       try {
         await approveSQL(approvalRun.runId, editedSql)
       } catch {
-        toast.error('Failed to send approval')
+        toast.error(t('agents.failedApproval'))
       }
     },
     [approvalRun, setPhase, updatePendingSql]
@@ -362,7 +369,7 @@ export default function AgentsPage() {
       try {
         await rejectSQL(approvalRun.runId, reason, sql)
       } catch {
-        toast.error('Failed to send rejection')
+        toast.error(t('agents.failedRejection'))
       }
     },
     [approvalRun, setPhase]
@@ -375,7 +382,7 @@ export default function AgentsPage() {
       try {
         await approveSQL(approvalRun.runId, undefined, { code: editedCode })
       } catch {
-        toast.error('Failed to send approval')
+        toast.error(t('agents.failedApproval'))
       }
     },
     [approvalRun, setPhase]
@@ -386,38 +393,9 @@ export default function AgentsPage() {
       if (!approvalRun) return
       setPhase(approvalRun.runId, 'running')
       try {
-        await rejectSQL(approvalRun.runId, reason, undefined, undefined, code)
+        await rejectSQL(approvalRun.runId, reason, undefined, code)
       } catch {
-        toast.error('Failed to send rejection')
-      }
-    },
-    [approvalRun, setPhase]
-  )
-
-  const handleRejectWebDatasource = useCallback(
-    async (reason: string) => {
-      if (!approvalRun) return
-      setPhase(approvalRun.runId, 'running')
-      try {
-        await rejectSQL(approvalRun.runId, reason)
-      } catch {
-        toast.error('Failed to send rejection')
-      }
-    },
-    [approvalRun, setPhase]
-  )
-
-  const handleApproveWebDatasource = useCallback(
-    async (selectedUrls: string[], name?: string) => {
-      if (!approvalRun) return
-      setPhase(approvalRun.runId, 'running')
-      try {
-        await approveSQL(approvalRun.runId, undefined, {
-          selected_urls: selectedUrls,
-          name,
-        })
-      } catch {
-        toast.error('Failed to send approval')
+        toast.error(t('agents.failedRejection'))
       }
     },
     [approvalRun, setPhase]
@@ -462,9 +440,9 @@ export default function AgentsPage() {
     <>
       <Header fixed>
         <div className='flex flex-col justify-center'>
-          <span className='font-semibold text-sm leading-tight'>Assistant</span>
+          <span className='font-semibold text-sm leading-tight'>{t('agents.title')}</span>
           <span className='text-[11px] text-muted-foreground leading-tight'>
-            The center stages focused on chat, streaming analysis, and quick actions.
+            {t('agents.subtitle')}
           </span>
         </div>
       </Header>
@@ -475,9 +453,9 @@ export default function AgentsPage() {
         {runs.length === 0 ? (
           <div className='mx-auto max-w-4xl flex flex-col items-center pt-[calc(50vh-200px)] px-4'>
             <div className='mb-6 text-center'>
-              <h1 className='text-4xl font-bold tracking-tight'>Assistant</h1>
+              <h1 className='text-4xl font-bold tracking-tight'>{t('agents.title')}</h1>
               <p className='text-muted-foreground text-lg mt-2'>
-                Ask a business question and let multiple AI agents collaborate to analyze your data.
+                {t('agents.heroSubtitle')}
               </p>
             </div>
             <div className='w-full max-w-3xl'>
@@ -553,13 +531,6 @@ export default function AgentsPage() {
         risk={approvalRun?.pendingPythonRisk ?? ''}
         onApprove={handleApprovePython}
         onReject={handleRejectPython}
-      />
-
-      <WebDatasourceApprovalModal
-        open={!!approvalRun && approvalRun.approvalKind === 'web_datasource'}
-        proposal={approvalRun?.pendingWebProposal ?? null}
-        onApprove={handleApproveWebDatasource}
-        onReject={handleRejectWebDatasource}
       />
     </>
   )

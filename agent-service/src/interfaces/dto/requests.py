@@ -35,12 +35,9 @@ class SkillUpdate(BaseModel):
 class ApproveRequest(BaseModel):
     sql: Optional[str] = None  # optionally edited SQL
     code: Optional[str] = None  # optionally edited Python (python_review)
-    selected_urls: Optional[List[str]] = None
-    name: Optional[str] = None
 
 
 class RejectRequest(BaseModel):
     reason: str = "User rejected the generated SQL"
     sql: Optional[str] = None  # edited SQL that should be used for regeneration
     code: Optional[str] = None  # edited Python (python_review)
-    selected_urls: Optional[List[str]] = None

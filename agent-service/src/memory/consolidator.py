@@ -37,15 +37,23 @@ class Consolidator:
         self.semantic = semantic
         self.model = model or MEMORY_LLM_MODEL
 
-    async def run(self, session_id: str, session_snapshot: dict[str, Any]) -> dict[str, Any]:
+    async def run(
+        self,
+        session_id: str,
+        session_snapshot: dict[str, Any],
+        *,
+        llm_model: str = "",
+        llm_base_url: str = "",
+        llm_api_key: str = "",
+    ) -> dict[str, Any]:
         if not session_snapshot or not any(session_snapshot.values()):
             return {"episode_summary": None, "facts_stored": 0}
 
         try:
-            client = get_async_client()
+            client = get_async_client(llm_base_url, llm_api_key)
             content = await chat_complete(
                 client,
-                self.model,
+                llm_model or self.model,
                 messages=[
                     {"role": "system", "content": _SYSTEM_PROMPT},
                     {"role": "user", "content": json.dumps(session_snapshot)[:6000]},

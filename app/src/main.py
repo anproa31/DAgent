@@ -16,6 +16,11 @@ from .core.lifespan import lifespan
 
 logging.basicConfig(level=logging.INFO)
 
+# DCE must use host Ollama in Docker; patch before any datasource registration.
+from .infrastructure.external.dce_integration import patch_dce_ollama
+
+patch_dce_ollama()
+
 app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(

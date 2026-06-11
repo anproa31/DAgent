@@ -23,7 +23,6 @@ export function mapReportToAgentRun(
     approvalKind: null,
     pendingSql: report.sql_draft ?? '',
     pendingSqlExplanation: report.sql_explanation ?? '',
-    pendingWebProposal: null,
     pendingPythonCode: '',
     pendingPythonRisk: '',
     streamingAnswer: '',

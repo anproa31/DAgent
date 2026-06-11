@@ -5,8 +5,10 @@ import {
 } from '@/components/ui/sidebar'
 import { Link } from '@tanstack/react-router'
 import { Plus } from 'lucide-react'
+import { useTranslation } from '@/context/locale-context'
 
 export default function NewAnalysisBtn() {
+  const { t } = useTranslation()
   const { setOpenMobile, state, isMobile } = useSidebar()
   const isExpanded = state === 'expanded' || isMobile
 
@@ -19,7 +21,7 @@ export default function NewAnalysisBtn() {
           onClick={() => setOpenMobile(false)}
         >
           {isExpanded ? (
-            <span className='truncate text-center font-semibold'>Start New Analysis</span>
+            <span className='truncate text-center font-semibold'>{t('nav.startNewAnalysis')}</span>
           ) : (
             <div className='flex items-center justify-center'>
               <Plus className='h-4 w-4 text-foreground' />

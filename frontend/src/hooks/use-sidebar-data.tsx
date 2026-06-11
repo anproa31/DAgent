@@ -10,6 +10,7 @@ import {
 import { useNavigate, useLocation } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { SidebarLoadingSpinner } from '@/components/shared/spinner/sidebar-loading-spinner'
+import { useLocale, useTranslation } from '@/context/locale-context'
 
 export const useSidebarData = (): {
   data: SidebarData | null
@@ -17,33 +18,53 @@ export const useSidebarData = (): {
   error: Error | null
 } => {
   const { data: tables, isLoading: tablesLoading, error: tablesError } = useTableList()
-  const { history, pinnedIds, isPinned, togglePin, removeFromHistory } = useSharedAnalysisHistory()
+  const {
+    history,
+    pinnedIds,
+    isPinned,
+    togglePin,
+    removeFromHistory,
+    refreshAgentSessionsFromServer,
+  } = useSharedAnalysisHistory()
   const navigate = useNavigate()
   const location = useLocation()
+  const { locale } = useLocale()
+  const { t } = useTranslation()
 
   const handleDelete = useCallback(
     (deletedId: string) => {
       const item = history.find((h) => h.id === deletedId)
-      void (async () => {
-        if (item?.kind === 'agent') {
-          try {
-            await deleteSession(deletedId)
-          } catch {
-            toast.error('Could not delete conversation on server')
-            return
-          }
+      const isAgent = item?.kind === 'agent'
+
+      // Optimistic: drop from the sidebar and leave the open session immediately so the
+      // UI updates in real time, regardless of backend latency.
+      removeFromHistory(deletedId)
+      toast.success(t('toast.conversationDeleted'))
+      if (location.pathname === '/agents') {
+        const params = new URLSearchParams(location.search)
+        if (params.get('session') === deletedId) {
+          navigate({ to: '/agents', search: {} })
         }
-        removeFromHistory(deletedId)
-        toast.success('Conversation deleted')
-        if (location.pathname === '/agents') {
-          const params = new URLSearchParams(location.search)
-          if (params.get('session') === deletedId) {
-            navigate({ to: '/agents', search: {} })
-          }
-        }
-      })()
+      }
+
+      if (!isAgent) return
+
+      // Persist the soft-delete in the background; on failure resync from the server
+      // (the row still exists there) so the conversation reappears.
+      void deleteSession(deletedId).catch(() => {
+        toast.error(t('toast.couldNotDeleteConversation'))
+        void refreshAgentSessionsFromServer()
+      })
     },
-    [removeFromHistory, navigate, location.pathname, location.search, history]
+    [
+      removeFromHistory,
+      refreshAgentSessionsFromServer,
+      navigate,
+      location.pathname,
+      location.search,
+      history,
+      t,
+    ]
   )
 
   const sidebarData = useMemo((): SidebarData | null => {
@@ -76,37 +97,39 @@ export const useSidebarData = (): {
           title: '',
           items: [
             {
-              title: 'All Datasources',
+              title: t('nav.allDatasources'),
               icon: IconDatabase,
               url: '/datasources',
             },
             {
-              title: 'Knowledge Base',
+              title: t('nav.knowledgeBase'),
               icon: IconBook2,
               url: '/knowledge-base',
             },
             {
-              title: 'Skills',
+              title: t('nav.skills'),
               icon: IconWand,
               url: '/skills',
             },
             {
-              title: 'Pinned',
+              id: 'pinned',
+              title: t('nav.pinned'),
               icon: IconPin,
               items: [
                 ...pinnedItems,
                 ...(pinnedItems.length === 0
-                  ? [{ title: 'No pinned conversations', url: '/agents' as const, placeholder: true }]
+                  ? [{ title: t('nav.noPinned'), url: '/agents' as const, placeholder: true }]
                   : []),
               ],
             },
             {
-              title: 'History',
+              id: 'history',
+              title: t('nav.history'),
               icon: IconClock,
               items: [
                 ...historyItems,
                 ...(historyItems.length === 0
-                  ? [{ title: 'No analyses yet', url: '/agents' as const, placeholder: true }]
+                  ? [{ title: t('nav.noHistory'), url: '/agents' as const, placeholder: true }]
                   : []),
               ],
             },
@@ -114,7 +137,7 @@ export const useSidebarData = (): {
         },
       ],
     }
-  }, [tables, history, pinnedIds, isPinned, togglePin, handleDelete])
+  }, [tables, history, pinnedIds, isPinned, togglePin, handleDelete, locale, t])
 
   return {
     data: sidebarData,
